@@ -54,7 +54,6 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Optional;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
@@ -113,6 +112,10 @@ public class InitialLoginSessionHandler implements MinecraftSessionHandler {
         return true;
       }
     } else if (mcConnection.getProtocolVersion().noLessThan(ProtocolVersion.MINECRAFT_1_19)
+        // Online-mode proxies also accept offline profiles after Mojang returns 204. Those
+        // clients cannot provide a Mojang-backed public key, so requiring one here would
+        // prevent the hybrid fallback from ever reaching the session server.
+        && !server.getConfiguration().isOnlineMode()
         && forceKeyAuthentication
         && mcConnection.getProtocolVersion().lessThan(ProtocolVersion.MINECRAFT_1_19_3)) {
       inbound.disconnect(Component.translatable("multiplayer.disconnect.missing_public_key"));
@@ -250,9 +253,14 @@ public class InitialLoginSessionHandler implements MinecraftSessionHandler {
               mcConnection.setActiveSessionHandler(StateRegistry.LOGIN,
                   new AuthSessionHandler(server, inbound, profile, true, serverId));
             } else if (response.statusCode() == 204) {
-              // Apparently an offline-mode user logged onto this online-mode proxy.
-              inbound.disconnect(
-                  Component.translatable("velocity.error.online-mode-only", NamedTextColor.RED));
+              // Mojang did not find a paid account for this username. Keep the player distinct
+              // from an authenticated profile by assigning an offline UUID to a dotted name.
+              // Do not retain a public key: it is tied to the account UUID, not this offline UUID,
+              // and would cause signed chat and commands to fail.
+              inbound.setPlayerKey(null);
+              mcConnection.setActiveSessionHandler(StateRegistry.LOGIN,
+                  new AuthSessionHandler(server, inbound,
+                      hybridOfflineProfile(login.getUsername()), false, null));
             } else {
               // Something else went wrong
               logger.error(
@@ -279,6 +287,16 @@ public class InitialLoginSessionHandler implements MinecraftSessionHandler {
     request.setPublicKey(server.getServerKeyPair().getPublic().getEncoded());
     request.setVerifyToken(verify);
     return request;
+  }
+
+  static GameProfile hybridOfflineProfile(String username) {
+    Preconditions.checkNotNull(username, "username");
+    // Login Success and player-list entries are limited to 16 characters by the Minecraft
+    // protocol. Reserve one character for the marker for maximum-length usernames.
+    String hybridUsername = username.length() < 16
+        ? username + "."
+        : username.substring(0, 15) + ".";
+    return GameProfile.forOfflinePlayer(hybridUsername);
   }
 
   @Override
