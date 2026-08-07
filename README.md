@@ -1,42 +1,63 @@
-# Velocity
+# HybridVelocity
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/PaperMC/Velocity/gradle.yml)](https://papermc.io/downloads/velocity)
-[![Join our Discord](https://img.shields.io/discord/289587909051416579.svg?logo=discord&label=)](https://discord.gg/papermc)
+A fork of [Velocity](https://github.com/PaperMC/Velocity), the Minecraft server proxy,
+that lets a single online-mode proxy serve both premium and offline players, and adds
+quality-of-life features for server networks.
 
-A Minecraft server proxy with unparalleled server support, scalability,
-and flexibility.
+HybridVelocity is licensed under the GPLv3 license, like Velocity.
 
-Velocity is licensed under the GPLv3 license.
+## What this fork adds
 
-## Goals
+### Hybrid offline profiles on online-mode proxies
 
-* A codebase that is easy to dive into and consistently follows best practices
-  for Java projects as much as reasonably possible.
-* High performance: handle thousands of players on one proxy.
-* A new, refreshing API built from the ground up to be flexible and powerful
-  whilst avoiding design mistakes and suboptimal designs from other proxies.
-* First-class support for Paper, Sponge, Fabric and Forge. (Other implementations
-  may work, but we make every endeavor to support these server implementations
-  specifically.)
-  
+Upstream Velocity kicks any player that Mojang cannot authenticate when the proxy runs in
+online mode. HybridVelocity accepts them instead as *hybrid offline profiles*:
+
+* When the session server reports that no paid account owns the username, the player is
+  given an offline UUID derived from their name with a `.` appended (`Steve123` becomes
+  `Steve123.`). Usernames at the 16-character protocol limit are truncated to make room
+  for the marker.
+* The dotted name and its offline UUID are the player's identity on the proxy, so an
+  offline player can never collide with the premium account of the same name.
+* No player public key is retained for these profiles, because the key belongs to the
+  Mojang account UUID and would break signed chat and commands.
+* Premium players keep the stock Velocity flow, unchanged.
+
+See `proxy/src/main/java/com/velocitypowered/proxy/connection/client/InitialLoginSessionHandler.java`.
+
+### Per-server shortcut commands
+
+Servers listed in the `comandos` option of `velocity.toml` get their own command named
+after the server, so players can run `/Lobby` instead of `/server Lobby`. The commands are
+available to everyone by default and can be restricted per server with permissions.
+See [docs/server-commands.md](docs/server-commands.md).
+
+### Planned: offline player authentication
+
+A register/login gate for hybrid offline players — the proxy holds them in the PLAY state
+with no backend connection until they authenticate, backed by an embedded SQLite database
+with salted password hashes. The full specification lives in
+[docs/update-plan.md](docs/update-plan.md); it is not implemented yet.
+
 ## Building
 
-Velocity is built with [Gradle](https://gradle.org). We recommend using the
-wrapper script (`./gradlew`) as our CI builds using it.
-
-It is sufficient to run `./gradlew build` to run the full build cycle.
+HybridVelocity is built with [Gradle](https://gradle.org). Use the wrapper script
+(`./gradlew`, or `./gradlew.bat` on Windows); running `./gradlew build` performs the full
+build cycle, including Checkstyle, Spotless and the tests.
 
 ## Running
 
-Once you've built Velocity, you can copy and run the `-all` JAR from
-`proxy/build/libs`. Velocity will generate a default configuration file
-and you can configure it from there.
+Once built, copy and run the `-all` JAR from `proxy/build/libs`. The proxy generates a
+default `velocity.toml` on first startup and you can configure it from there.
 
-Alternatively, you can get the proxy JAR from the [downloads](https://papermc.io/downloads/velocity)
-page.
+## Documentation
 
-# Localisation
+Fork-specific documentation lives in [docs/](docs/README.md). For everything inherited
+from upstream, the [Velocity documentation](https://docs.papermc.io/velocity) still
+applies.
 
-Translations are handled using [Crowdin](https://papermc-io.crowdin.com/velocity).
-If you want to translate a language not available on Crowdin,
-you might want to ask in the [Discord](https://discord.gg/papermc) about it.
+## Upstream
+
+This project is a derivative of Velocity by the PaperMC team. Bugs that also reproduce on
+upstream Velocity should be reported to
+[PaperMC/Velocity](https://github.com/PaperMC/Velocity), not here.

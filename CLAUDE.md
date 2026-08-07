@@ -2,7 +2,10 @@
 
 ## Project Structure & Module Organization
 
-Velocity is a multi-module Gradle project targeting Java 25. `api/` contains the public API, `proxy/` contains the proxy implementation and protocol handling, and `native/` holds native integrations. Shared Gradle convention plugins live in `build-logic/`; Checkstyle configuration is in `config/checkstyle/`. Production and test code follow the conventional layout: `*/src/main/java` and `*/src/test/java`. The distributable shaded JAR is produced under `proxy/build/libs/`.
+HybridVelocity is a fork of Velocity: a multi-module Gradle project targeting Java 25.
+`docs/` documents what this fork changes on top of upstream (hybrid offline profiles,
+per-server shortcut commands, and the planned offline authentication system) — read it
+before touching login, configuration or command code. `api/` contains the public API, `proxy/` contains the proxy implementation and protocol handling, and `native/` holds native integrations. Shared Gradle convention plugins live in `build-logic/`; Checkstyle configuration is in `config/checkstyle/`. Production and test code follow the conventional layout: `*/src/main/java` and `*/src/test/java`. The distributable shaded JAR is produced under `proxy/build/libs/`.
 
 ## Build, Test, and Development Commands
 
