@@ -99,6 +99,13 @@ try = [
     "lobby"
 ]
 
+# Servers listed here also get their own shortcut command, named after the server.
+# For example, adding "lobby" lets players run /lobby to be sent to that server.
+# Every name must also exist in [servers] above. These commands are allowed for all
+# players by default, and can be restricted per server with the permission
+# velocity.command.server.<server name in lowercase>.
+comandos = []
+
 [forced-hosts]
 # Configure your forced hosts here.
 "lobby.example.com" = [

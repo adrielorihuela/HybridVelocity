@@ -44,6 +44,7 @@ import com.velocitypowered.proxy.command.builtin.CallbackCommand;
 import com.velocitypowered.proxy.command.builtin.GlistCommand;
 import com.velocitypowered.proxy.command.builtin.SendCommand;
 import com.velocitypowered.proxy.command.builtin.ServerCommand;
+import com.velocitypowered.proxy.command.builtin.ServerShortcutCommand;
 import com.velocitypowered.proxy.command.builtin.ShutdownCommand;
 import com.velocitypowered.proxy.command.builtin.VelocityCommand;
 import com.velocitypowered.proxy.config.VelocityConfiguration;
@@ -85,10 +86,12 @@ import java.security.KeyPair;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -175,6 +178,7 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
   private final VelocityScheduler scheduler;
   private final VelocityChannelRegistrar channelRegistrar = new VelocityChannelRegistrar();
   private final ServerListPingHandler serverListPingHandler;
+  private final Set<String> registeredServerCommands = new LinkedHashSet<>();
 
   VelocityServer(final ProxyOptions options) {
     pluginManager = new VelocityPluginManager(this);
@@ -304,6 +308,8 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
       }
     }
 
+    registerServerCommands(configuration.getServerCommands());
+
     ipAttemptLimiter = Ratelimiters.createWithMilliseconds(configuration.getLoginRatelimit());
     commandRateLimiter = Ratelimiters.createWithMilliseconds(configuration.getCommandRatelimit());
     tabCompleteRateLimiter = Ratelimiters.createWithMilliseconds(configuration.getTabCompleteRatelimit());
@@ -340,6 +346,37 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
       Metrics.VelocityMetrics.startMetrics(this, configuration.getMetrics());
     } else {
       logger.warn("debug environment, metrics is disabled!");
+    }
+  }
+
+  /**
+   * Registers a shortcut command for every server listed in the {@code comandos} option of the
+   * {@code [servers]} configuration section, replacing any previously registered ones.
+   *
+   * @param serverCommands the server names to expose as commands
+   */
+  private void registerServerCommands(final Collection<String> serverCommands) {
+    for (String alias : registeredServerCommands) {
+      commandManager.unregister(alias);
+    }
+    registeredServerCommands.clear();
+
+    for (String serverName : serverCommands) {
+      final String alias = serverName.toLowerCase(Locale.ENGLISH);
+      if (commandManager.hasCommand(alias)) {
+        logger.warn("Not registering the /{} server command: a command with that name already "
+            + "exists.", serverName);
+        continue;
+      }
+
+      final BrigadierCommand command = ServerShortcutCommand.create(this, serverName);
+      commandManager.register(
+          commandManager.metaBuilder(command)
+              .plugin(VelocityVirtualPlugin.INSTANCE)
+              .build(),
+          command
+      );
+      registeredServerCommands.add(alias);
     }
   }
 
@@ -536,6 +573,8 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
         Thread.currentThread().interrupt();
       }
     }
+
+    registerServerCommands(newConfiguration.getServerCommands());
 
     // If we have a new bind address, bind to it
     if (!configuration.getBind().equals(newConfiguration.getBind())) {

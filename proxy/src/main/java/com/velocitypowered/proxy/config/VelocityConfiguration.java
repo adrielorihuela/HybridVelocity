@@ -193,6 +193,13 @@ public class VelocityConfiguration implements ProxyConfig {
       }
     }
 
+    for (String s : servers.getServerCommands()) {
+      if (!servers.getServers().containsKey(s)) {
+        logger.error("Server command '{}' is not registered in your configuration!", s);
+        valid = false;
+      }
+    }
+
     for (Map.Entry<String, List<String>> entry : forcedHosts.getForcedHosts().entrySet()) {
       if (entry.getValue().isEmpty()) {
         logger.error("Forced host '{}' does not contain any servers", entry.getKey());
@@ -320,6 +327,16 @@ public class VelocityConfiguration implements ProxyConfig {
   @Override
   public List<String> getAttemptConnectionOrder() {
     return servers.getAttemptConnectionOrder();
+  }
+
+  /**
+   * Returns the servers that should additionally get their own shortcut command, as configured
+   * by the {@code comandos} list in the {@code [servers]} section.
+   *
+   * @return the server names to expose as commands
+   */
+  public List<String> getServerCommands() {
+    return servers.getServerCommands();
   }
 
   @Override
@@ -624,7 +641,7 @@ public class VelocityConfiguration implements ProxyConfig {
     return onlineModeKickExistingPlayers;
   }
 
-  private static class Servers {
+  static class Servers {
 
     private Map<String, String> servers = ImmutableMap.of(
         "lobby", "127.0.0.1:30066",
@@ -632,18 +649,20 @@ public class VelocityConfiguration implements ProxyConfig {
         "minigames", "127.0.0.1:30068"
     );
     private List<String> attemptConnectionOrder = ImmutableList.of("lobby");
+    private List<String> serverCommands = ImmutableList.of();
 
     private Servers() {
     }
 
-    private Servers(CommentedConfig config) {
+    Servers(CommentedConfig config) {
       if (config != null) {
         Map<String, String> servers = new HashMap<>();
         for (UnmodifiableConfig.Entry entry : config.entrySet()) {
           if (entry.getValue() instanceof String) {
             servers.put(cleanServerName(entry.getKey()), entry.getValue());
           } else {
-            if (!entry.getKey().equalsIgnoreCase("try")) {
+            if (!entry.getKey().equalsIgnoreCase("try")
+                && !entry.getKey().equalsIgnoreCase("comandos")) {
               throw new IllegalArgumentException(
                   "Server entry " + entry.getKey() + " is not a string!");
             }
@@ -651,15 +670,19 @@ public class VelocityConfiguration implements ProxyConfig {
         }
         this.servers = ImmutableMap.copyOf(servers);
         this.attemptConnectionOrder = config.getOrElse("try", attemptConnectionOrder);
+        this.serverCommands = ImmutableList.copyOf(
+            config.<List<String>>getOrElse("comandos", serverCommands));
       }
     }
 
-    private Servers(Map<String, String> servers, List<String> attemptConnectionOrder) {
+    private Servers(Map<String, String> servers, List<String> attemptConnectionOrder,
+        List<String> serverCommands) {
       this.servers = servers;
       this.attemptConnectionOrder = attemptConnectionOrder;
+      this.serverCommands = serverCommands;
     }
 
-    private Map<String, String> getServers() {
+    Map<String, String> getServers() {
       return servers;
     }
 
@@ -673,6 +696,14 @@ public class VelocityConfiguration implements ProxyConfig {
 
     public void setAttemptConnectionOrder(List<String> attemptConnectionOrder) {
       this.attemptConnectionOrder = attemptConnectionOrder;
+    }
+
+    public List<String> getServerCommands() {
+      return serverCommands;
+    }
+
+    public void setServerCommands(List<String> serverCommands) {
+      this.serverCommands = serverCommands;
     }
 
     /**
@@ -692,6 +723,7 @@ public class VelocityConfiguration implements ProxyConfig {
       return "Servers{"
           + "servers=" + servers
           + ", attemptConnectionOrder=" + attemptConnectionOrder
+          + ", serverCommands=" + serverCommands
           + '}';
     }
   }
