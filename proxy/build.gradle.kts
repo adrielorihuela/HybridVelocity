@@ -13,6 +13,12 @@ application {
     applicationDefaultJvmArgs += listOf("-Dvelocity.packet-decode-logging=true")
 }
 
+// Name and version of this fork, used for the distributable JAR and the version the proxy
+// reports at runtime. The project version stays on the upstream Velocity API version so that
+// plugins depending on velocity-api are unaffected.
+val forkName: String by project
+val forkVersion: String by project
+
 tasks {
     withType<Checkstyle> {
         exclude("**/com/velocitypowered/proxy/protocol/packet/**")
@@ -20,13 +26,24 @@ tasks {
 
     jar {
         manifest {
-            attributes["Implementation-Title"] = "Velocity"
-            attributes["Implementation-Vendor"] = "Velocity Contributors"
+            attributes["Implementation-Title"] = forkName
+            attributes["Implementation-Vendor"] = "HybridVelocity Contributors"
             attributes["Multi-Release"] = "true"
         }
     }
 
     shadowJar {
+        // Produces HybridVelocity-<forkVersion>.jar instead of velocity-proxy-<version>-all.jar.
+        archiveBaseName.set(forkName)
+        archiveVersion.set(forkVersion)
+        archiveClassifier.set("")
+
+        manifest {
+            attributes["Implementation-Title"] = forkName
+            attributes["Implementation-Vendor"] = "HybridVelocity Contributors"
+            attributes["Implementation-Version"] = forkVersion
+        }
+
         filesMatching("META-INF/org/apache/logging/log4j/core/config/plugins/**") {
             duplicatesStrategy = DuplicatesStrategy.INCLUDE
         }
