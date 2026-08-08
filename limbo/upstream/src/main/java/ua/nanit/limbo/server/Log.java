@@ -25,10 +25,12 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+// HybridVelocity patch: the logger is named after the authentication server, matching the server
+// name in hybridvelocity.toml, so the console reads [auth] rather than [Limbo].
 @UtilityClass
 public class Log {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger("Limbo");
+    private static final Logger LOGGER = LoggerFactory.getLogger("auth");
     private static int debugLevel = Level.INFO.getIndex();
 
     public static void info(@NonNull Object msg, @Nullable Object... args) {

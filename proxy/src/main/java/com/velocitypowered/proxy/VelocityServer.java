@@ -40,6 +40,7 @@ import com.velocitypowered.api.proxy.server.ServerInfo;
 import com.velocitypowered.api.util.Favicon;
 import com.velocitypowered.api.util.GameProfile;
 import com.velocitypowered.api.util.ProxyVersion;
+import com.velocitypowered.proxy.auth.AuthServer;
 import com.velocitypowered.proxy.auth.OfflineAuthCommands;
 import com.velocitypowered.proxy.auth.OfflineAuthGate;
 import com.velocitypowered.proxy.auth.OfflineAuthManager;
@@ -59,7 +60,6 @@ import com.velocitypowered.proxy.connection.util.ServerListPingHandler;
 import com.velocitypowered.proxy.console.VelocityConsole;
 import com.velocitypowered.proxy.crypto.EncryptionUtils;
 import com.velocitypowered.proxy.event.VelocityEventManager;
-import com.velocitypowered.proxy.limbo.EmbeddedLimboServer;
 import com.velocitypowered.proxy.network.ConnectionManager;
 import com.velocitypowered.proxy.plugin.VelocityPluginManager;
 import com.velocitypowered.proxy.plugin.loader.VelocityPluginContainer;
@@ -162,8 +162,8 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
       .create();
   private static final int PRE_SHUTDOWN_TIMEOUT =
             Integer.getInteger("velocity.pre-shutdown-timeout", 10);
-  /** Name of the internal limbo server that holds players while they authenticate. */
-  private static final String LIMBO_SERVER_NAME = InternalServers.AUTH;
+  /** Name of the internal server that holds players while they authenticate. */
+  private static final String AUTH_SERVER_NAME = InternalServers.AUTH;
 
   private final ConnectionManager cm;
   private final ProxyOptions options;
@@ -188,10 +188,10 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
   private final VelocityChannelRegistrar channelRegistrar = new VelocityChannelRegistrar();
   private final ServerListPingHandler serverListPingHandler;
   private final Set<String> registeredServerCommands = new LinkedHashSet<>();
-  private @Nullable EmbeddedLimboServer limbo;
+  private @Nullable AuthServer authServer;
   private @Nullable OfflineAuthManager offlineAuth;
   private @Nullable OfflineAuthGate offlineAuthGate;
-  private @Nullable RegisteredServer limboServer;
+  private @Nullable RegisteredServer authServerEntry;
 
   VelocityServer(final ProxyOptions options) {
     pluginManager = new VelocityPluginManager(this);
@@ -398,10 +398,10 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
   }
 
   /**
-   * Starts the embedded limbo that holds unauthenticated players, if offline authentication is
-   * enabled.
+   * Starts the authentication server that holds unauthenticated players, if offline authentication
+   * is enabled.
    *
-   * <p>The limbo is deliberately <em>not</em> entered into the {@link ServerMap}: nothing filters
+   * <p>It is deliberately <em>not</em> entered into the {@link ServerMap}: nothing filters
    * {@code getAllServers()}, so registering it would expose it in {@code /server} tab completion,
    * {@code /glist}, {@code /send} and the BungeeCord plugin channel, and make {@code /server
    * <limbo>} a working shortcut for anyone. {@link #createRawRegisteredServer} yields a fully
@@ -420,28 +420,28 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
       return;
     }
 
-    final EmbeddedLimboServer embedded =
-        new EmbeddedLimboServer(Path.of("auth"), configuration);
+    final AuthServer embedded =
+        new AuthServer(Path.of("auth"), configuration);
     try {
       embedded.start(config.limboPort());
     } catch (Exception e) {
       manager.shutdown();
-      logger.error("Could not start the embedded limbo. Offline players will be refused until "
-          + "this is fixed.", e);
+      logger.error("Could not start the authentication server. Offline players will be refused "
+          + "until this is fixed.", e);
       return;
     }
 
     this.offlineAuth = manager;
-    this.limbo = embedded;
+    this.authServer = embedded;
 
     // Registered like any other backend rather than kept out of the ServerMap. ViaVersion learns a
     // backend's protocol version by pinging the servers it finds in getAllServers(); a server it
     // has never seen falls back to a pre-1.16 assumption and mis-decodes the login handshake. It is
     // hidden from command output by InternalServers instead.
-    final ServerInfo limboInfo = new ServerInfo(LIMBO_SERVER_NAME, embedded.getAddress());
-    servers.getServer(LIMBO_SERVER_NAME)
+    final ServerInfo authInfo = new ServerInfo(AUTH_SERVER_NAME, embedded.getAddress());
+    servers.getServer(AUTH_SERVER_NAME)
         .ifPresent(existing -> servers.unregister(existing.getServerInfo()));
-    this.limboServer = servers.register(limboInfo);
+    this.authServerEntry = servers.register(authInfo);
 
     final OfflineAuthGate gate = new OfflineAuthGate(this, manager);
     this.offlineAuthGate = gate;
@@ -452,7 +452,7 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
     registerBuiltinCommand(OfflineAuthCommands.changePassword(manager, gate));
   }
 
-  /** Stops the embedded limbo and the authentication database if they are running. */
+  /** Stops the authentication server and its database if they are running. */
   private void stopOfflineAuth() {
     final OfflineAuthGate gate = this.offlineAuthGate;
     this.offlineAuthGate = null;
@@ -464,14 +464,14 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
       commandManager.unregister("changepassword");
     }
 
-    final RegisteredServer registered = this.limboServer;
-    this.limboServer = null;
+    final RegisteredServer registered = this.authServerEntry;
+    this.authServerEntry = null;
     if (registered != null) {
       servers.unregister(registered.getServerInfo());
     }
 
-    final EmbeddedLimboServer embedded = this.limbo;
-    this.limbo = null;
+    final AuthServer embedded = this.authServer;
+    this.authServer = null;
     if (embedded != null) {
       embedded.stop();
     }
@@ -525,13 +525,13 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
   }
 
   /**
-   * Returns the limbo players wait on while they authenticate.
+   * Returns the server players wait on while they authenticate.
    *
-   * @return the limbo server, or {@code null} if offline authentication is off or it failed to
-   *     start
+   * @return the authentication server, or {@code null} if offline authentication is off or it
+   *     failed to start
    */
-  public @Nullable RegisteredServer getLimboServer() {
-    return limboServer;
+  public @Nullable RegisteredServer getAuthServer() {
+    return authServerEntry;
   }
 
   private void registerTranslations() {

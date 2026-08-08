@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.velocitypowered.proxy.limbo;
+package com.velocitypowered.proxy.auth;
 
 import com.velocitypowered.proxy.config.PlayerInfoForwarding;
 import com.velocitypowered.proxy.config.VelocityConfiguration;
@@ -37,8 +37,8 @@ import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 import ua.nanit.limbo.server.LimboServer;
 
 /**
- * Runs a {@link LimboServer} inside the proxy JVM, bound to loopback, as the holding area for
- * players that have not authenticated yet.
+ * The authentication server: a limbo world run inside the proxy JVM, bound to loopback, where
+ * players wait until they register or log in.
  *
  * <p>The operator never configures this. The settings file is written once from a documented
  * template, and afterwards it is left alone unless the two values the proxy owns — the bind port
@@ -46,13 +46,13 @@ import ua.nanit.limbo.server.LimboServer;
  * would strip every comment, so it only happens when something genuinely changed, and it is logged
  * when it does.</p>
  *
- * <p>See {@code docs/limbo.md}.</p>
+ * <p>See {@code docs/auth-server.md}.</p>
  */
-public final class EmbeddedLimboServer {
+public final class AuthServer {
 
-  private static final Logger logger = LogManager.getLogger(EmbeddedLimboServer.class);
+  private static final Logger logger = LogManager.getLogger(AuthServer.class);
   private static final String SETTINGS_FILE = "settings.yml";
-  private static final String TEMPLATE_RESOURCE = "/limbo-settings.yml";
+  private static final String TEMPLATE_RESOURCE = "/auth-server-settings.yml";
   private static final String LOOPBACK = "127.0.0.1";
 
   private final Path directory;
@@ -61,13 +61,13 @@ public final class EmbeddedLimboServer {
   private @Nullable LimboServer limbo;
   private @Nullable InetSocketAddress address;
 
-  public EmbeddedLimboServer(final Path directory, final VelocityConfiguration configuration) {
+  public AuthServer(final Path directory, final VelocityConfiguration configuration) {
     this.directory = directory;
     this.configuration = configuration;
   }
 
   /**
-   * Writes the settings if needed and starts the limbo server.
+   * Writes the settings if needed and starts the authentication server.
    *
    * @param port the port to bind on loopback, or {@code 0} to pick a free one
    * @throws Exception if the settings cannot be written or the server cannot bind
@@ -83,10 +83,10 @@ public final class EmbeddedLimboServer {
 
     this.limbo = server;
     this.address = new InetSocketAddress(LOOPBACK, boundPort);
-    logger.info("Embedded limbo listening on {}", this.address);
+    logger.info("Authentication server listening on {}", this.address);
   }
 
-  /** Stops the limbo server if it is running. */
+  /** Stops the authentication server if it is running. */
   public void stop() {
     final LimboServer server = this.limbo;
     if (server == null) {
@@ -97,7 +97,7 @@ public final class EmbeddedLimboServer {
     try {
       server.stop();
     } catch (Exception e) {
-      logger.error("Exception while stopping the embedded limbo", e);
+      logger.error("Exception while stopping the authentication server", e);
     }
   }
 
@@ -135,9 +135,10 @@ public final class EmbeddedLimboServer {
   private static void writeTemplate(final Path settings, final int port, final String type,
       final String secret) throws IOException {
     final String template;
-    try (InputStream in = EmbeddedLimboServer.class.getResourceAsStream(TEMPLATE_RESOURCE)) {
+    try (InputStream in = AuthServer.class.getResourceAsStream(TEMPLATE_RESOURCE)) {
       if (in == null) {
-        throw new IOException("The bundled limbo settings template is missing from the jar");
+        throw new IOException(
+            "The bundled authentication server settings are missing from the jar");
       }
       template = new String(in.readAllBytes(), StandardCharsets.UTF_8);
     }
@@ -178,7 +179,7 @@ public final class EmbeddedLimboServer {
         root.node("infoForwarding", "tokens").setList(String.class, java.util.List.of(secret));
       }
     } catch (SerializationException e) {
-      throw new IOException("Could not update the embedded limbo settings", e);
+      throw new IOException("Could not update the authentication server settings", e);
     }
     loader.save(root);
   }
@@ -202,7 +203,7 @@ public final class EmbeddedLimboServer {
   /**
    * Asks the OS for a free port by binding and immediately releasing one.
    *
-   * <p>There is a small race between releasing the port and the limbo claiming it, which is why
+   * <p>There is a small race between releasing the port and the server claiming it, which is
    * the configuration defaults to a fixed port instead.</p>
    */
   private static int findFreePort() throws IOException {

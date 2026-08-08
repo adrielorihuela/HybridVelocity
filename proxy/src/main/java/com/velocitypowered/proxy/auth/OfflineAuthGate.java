@@ -51,7 +51,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
- * Keeps unauthenticated offline players in the embedded limbo until they register or log in.
+ * Keeps unauthenticated offline players on the authentication server until they register or log
+ * in.
  *
  * <p>Everything is done with events rather than by patching the login handlers. A single
  * {@link ServerPreConnectEvent} listener covers every route to a backend — the initial connect for
@@ -60,8 +61,9 @@ import org.apache.logging.log4j.Logger;
  * {@code createConnectionRequest}. That keeps {@code PostLoginEvent} firing normally, which the
  * earlier attempt broke.</p>
  *
- * <p>Chat needs no handling: the limbo never registers a serverbound chat packet, so anything a
- * waiting player types is discarded there and cannot reach a real server. Denying
+ * <p>Chat needs no handling: the authentication server never registers a serverbound chat
+ * packet, so anything a waiting player types is discarded there and cannot reach a real server.
+ * Denying
  * {@link com.velocitypowered.api.event.player.PlayerChatEvent} would kick 1.19.1+ clients
  * outright.</p>
  */
@@ -94,15 +96,15 @@ public final class OfflineAuthGate {
     return !player.isOnlineMode() && !manager.isAuthenticated(player.getUniqueId());
   }
 
-  /** Redirects gated players to the limbo, whatever their intended destination was. */
+  /** Redirects gated players to the authentication server, whatever the destination was. */
   @Subscribe(order = PostOrder.FIRST)
   public void onServerPreConnect(final ServerPreConnectEvent event) {
     final Player player = event.getPlayer();
     if (!isGated(player)) {
-      // The limbo is a normally registered server so that plugins which enumerate servers — most
-      // importantly ViaVersion, which pings each one to learn its protocol — behave. That means an
-      // authenticated player could ask to go there by name, which is nothing but a way to get
-      // stuck in an empty world.
+      // The authentication server is registered normally so that plugins which enumerate
+      // servers — most importantly ViaVersion, which pings each one to learn its protocol —
+      // behave. That means an authenticated player could ask to go there by name, which is
+      // nothing but a way to get stuck in an empty world.
       final Optional<RegisteredServer> requested = event.getResult().getServer();
       if (requested.isPresent() && InternalServers.isInternal(requested.get())) {
         event.setResult(ServerPreConnectEvent.ServerResult.denied());
@@ -110,8 +112,8 @@ public final class OfflineAuthGate {
       return;
     }
 
-    final RegisteredServer limbo = server.getLimboServer();
-    if (limbo == null || !manager.isAvailable()) {
+    final RegisteredServer authServer = server.getAuthServer();
+    if (authServer == null || !manager.isAvailable()) {
       // Fail closed. Letting them through would put an unauthenticated player on a real server.
       event.setResult(ServerPreConnectEvent.ServerResult.denied());
       player.disconnect(Component.text(
@@ -120,18 +122,18 @@ public final class OfflineAuthGate {
     }
 
     final Optional<RegisteredServer> current = event.getResult().getServer();
-    if (current.isPresent() && current.get().equals(limbo)) {
+    if (current.isPresent() && current.get().equals(authServer)) {
       return;
     }
-    event.setResult(ServerPreConnectEvent.ServerResult.allowed(limbo));
+    event.setResult(ServerPreConnectEvent.ServerResult.allowed(authServer));
   }
 
-  /** Prompts the player once they are actually in the limbo, and starts the timeout. */
+  /** Prompts the player once they have actually arrived, and starts the timeout. */
   @Subscribe
   public void onServerConnected(final ServerConnectedEvent event) {
     final Player player = event.getPlayer();
-    final RegisteredServer limbo = server.getLimboServer();
-    if (limbo == null || !event.getServer().equals(limbo) || !isGated(player)) {
+    final RegisteredServer authServer = server.getAuthServer();
+    if (authServer == null || !event.getServer().equals(authServer) || !isGated(player)) {
       return;
     }
 

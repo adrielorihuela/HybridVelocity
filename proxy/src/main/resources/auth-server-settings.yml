@@ -1,12 +1,12 @@
-# Settings for the limbo world that holds players while they register or log in.
+# Settings for the authentication server: the world players wait in until they register or log in.
 #
 # This file is created once and then left alone. Edit it freely — the proxy only rewrites it if
-# `limbo-port` or the forwarding mode in hybridvelocity.toml changes, and it will say so in the
+# `auth-server-port` or the forwarding mode in hybridvelocity.toml changes, and it will say so in the
 # console when it does (your comments are lost on such a rewrite).
 #
 # The defaults are deliberately silent and cheap: no messages, no tab list, no HUD, one thread.
 
-# Managed by the proxy. Always loopback, so the limbo is unreachable from outside this machine.
+# Managed by the proxy. Always loopback, so this is unreachable from outside this machine.
 # Change the port in hybridvelocity.toml under [offline-auth], not here.
 bind:
   ip: "127.0.0.1"
@@ -23,7 +23,7 @@ infoForwarding:
 # How many players may wait here at once. -1 for unlimited.
 maxPlayers: 100
 
-# What this shows if something pings it directly. Players never see it: the limbo is only
+# What this shows if something pings it directly. Players never see it: this server is only
 # reachable on loopback, and it is hidden from /server and the other command listings.
 ping:
   description: "HybridVelocity authentication"
@@ -98,7 +98,7 @@ readTimeout: 30000
 logPlayersIp: false
 
 # 0 errors only, 1 errors and warnings, 2 adds info, 3 adds debug.
-# 1 keeps the console quiet; the proxy already reports when the limbo starts and stops.
+# 1 keeps the console quiet; the proxy already reports when this server starts and stops.
 debugLevel: 1
 
 # Networking. Only change these if you know why you are changing them.
@@ -111,7 +111,7 @@ netty:
     bossGroup: 1
     workerGroup: 1
 
-# Kick connections that flood the limbo. A waiting player sends almost nothing, so these limits
+# Kick connections that flood this server. A waiting player sends almost nothing, so the limits
 # are far tighter than a real server's would be.
 traffic:
   enable: true

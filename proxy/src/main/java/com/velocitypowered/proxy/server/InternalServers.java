@@ -34,7 +34,7 @@ import java.util.Locale;
  */
 public final class InternalServers {
 
-  /** The limbo that holds players while they authenticate. */
+  /** The server that holds players while they authenticate. */
   public static final String AUTH = "Auth";
 
   private InternalServers() {
