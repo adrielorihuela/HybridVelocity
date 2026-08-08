@@ -3,11 +3,10 @@
 # Edit this file freely; the proxy never rewrites it. The defaults are deliberately silent and
 # cheap: no messages, no tab list, no HUD, one thread.
 #
-# The bind address and the player-info forwarding are not here on purpose. They come from
-# hybridvelocity.toml (`auth-server-port` and `player-info-forwarding-mode`), because getting them
-# wrong would expose this server outside the machine or break the handshake with the proxy. On
-# start-up the proxy merges them with this file and writes the result to generated/settings.yml,
-# which is what actually runs. Do not edit that copy - it is overwritten every time.
+# The bind address and the player-info forwarding are deliberately absent. The proxy passes them in
+# directly from hybridvelocity.toml ([offline-auth] server-port and player-info-forwarding-mode),
+# because binding anywhere but 127.0.0.1 would expose this server to the network and a forwarding
+# mode that disagrees with the proxy's breaks the handshake.
 
 # How many players may wait here at once. -1 for unlimited.
 maxPlayers: 100
@@ -41,7 +40,7 @@ secureProfile: false
 # `username` is still read even when disabled, so it must not be removed.
 playerList:
   enable: false
-  username: "Auth"
+  username: "auth"
 
 # Header and footer text above and below the tab list.
 headerAndFooter:

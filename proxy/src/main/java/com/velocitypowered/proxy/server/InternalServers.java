@@ -35,7 +35,7 @@ import java.util.Locale;
 public final class InternalServers {
 
   /** The default name of the server that holds players while they authenticate. */
-  public static final String DEFAULT_AUTH = "Auth";
+  public static final String DEFAULT_AUTH = "auth";
 
   private static volatile String authName = DEFAULT_AUTH;
 

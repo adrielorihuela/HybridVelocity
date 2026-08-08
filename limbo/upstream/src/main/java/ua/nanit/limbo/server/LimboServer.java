@@ -51,6 +51,8 @@ public final class LimboServer {
     // the JVM shutdown hook and the explicit System.gc() are all skipped. Lifecycle is driven by
     // VelocityServer instead. See docs/limbo.md.
     private boolean embedded;
+    private java.net.SocketAddress pendingAddress;
+    private ua.nanit.limbo.server.data.InfoForwarding pendingForwarding;
 
     public void start() throws Exception {
         start(Paths.get("./"));
@@ -58,6 +60,9 @@ public final class LimboServer {
 
     public void start(java.nio.file.Path workingDirectory) throws Exception {
         config = new LimboConfig(workingDirectory);
+        if (pendingAddress != null) {
+            config.override(pendingAddress, pendingForwarding);
+        }
         config.load();
 
         Log.setLevel(config.getDebugLevel());
@@ -93,9 +98,15 @@ public final class LimboServer {
         }
     }
 
-    /** HybridVelocity patch: run without the standalone console, shutdown hook and System.gc(). */
-    public void startEmbedded(java.nio.file.Path workingDirectory) throws Exception {
+    /**
+     * HybridVelocity patch: run without the standalone console, shutdown hook and System.gc(), with
+     * the bind address and forwarding supplied by the proxy rather than read from settings.yml.
+     */
+    public void startEmbedded(java.nio.file.Path workingDirectory, java.net.SocketAddress address,
+            ua.nanit.limbo.server.data.InfoForwarding forwarding) throws Exception {
         this.embedded = true;
+        this.pendingAddress = address;
+        this.pendingForwarding = forwarding;
         start(workingDirectory);
     }
 

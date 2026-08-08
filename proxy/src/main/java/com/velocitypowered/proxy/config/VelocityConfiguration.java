@@ -207,23 +207,25 @@ public class VelocityConfiguration implements ProxyConfig {
 
     if (offlineAuthConfig.enabled()) {
       if (offlineAuthConfig.serverPort() < 0 || offlineAuthConfig.serverPort() > 65535) {
-        logger.error("'auth-server-port' {} is not a valid port.", offlineAuthConfig.serverPort());
+        logger.error("[offline-auth] server-port {} is not a valid port.",
+            offlineAuthConfig.serverPort());
         valid = false;
       }
       if (offlineAuthConfig.serverName().isBlank()) {
-        logger.error("'auth-server-name' must not be empty.");
+        logger.error("[offline-auth] server-name must not be empty.");
         valid = false;
       }
       for (String configured : servers.getServers().keySet()) {
         if (configured.equalsIgnoreCase(offlineAuthConfig.serverName())) {
-          logger.error("'auth-server-name' is '{}', which is also a server in [servers]. Pick a "
-              + "name no configured server uses.", offlineAuthConfig.serverName());
+          logger.error("[offline-auth] server-name is '{}', which is also a server in "
+              + "[servers]. Pick a name no configured server uses.",
+              offlineAuthConfig.serverName());
           valid = false;
         }
       }
       if (servers.getAttemptConnectionOrder().isEmpty()) {
-        logger.error("'offline-auth' is enabled but 'try' is empty, so there would be nowhere to "
-            + "send players after they authenticate.");
+        logger.error("[offline-auth] is enabled but 'try' is empty, so there would be nowhere "
+            + "to send players after they authenticate.");
         valid = false;
       }
     }
@@ -609,7 +611,8 @@ public class VelocityConfiguration implements ProxyConfig {
       final CommentedConfig advancedConfig = config.get("advanced");
       final CommentedConfig queryConfig = config.get("query");
       final CommentedConfig metricsConfig = config.get("metrics");
-      final OfflineAuthConfig offlineAuthConfig = OfflineAuthConfig.fromConfig(config);
+      final OfflineAuthConfig offlineAuthConfig =
+              OfflineAuthConfig.fromConfig(config.get("offline-auth"));
       final PlayerInfoForwarding forwardingMode = config.getEnumOrElse(
               "player-info-forwarding-mode", PlayerInfoForwarding.NONE);
       final PingPassthroughMode pingPassthroughMode = config.getEnumOrElse("ping-passthrough",
@@ -1092,22 +1095,22 @@ public class VelocityConfiguration implements ProxyConfig {
      */
     public static final String DATABASE_FILE = "auth/player-passwords.db";
 
-    public static final OfflineAuthConfig DEFAULT = new OfflineAuthConfig(true, "Auth", 30065);
+    public static final OfflineAuthConfig DEFAULT = new OfflineAuthConfig(true, "auth", 30065);
 
     /**
-     * Reads the offline authentication options from the root of the configuration.
+     * Returns an OfflineAuthConfig from a config section, or the default if the section is null.
      *
-     * @param config the whole configuration
-     * @return the offline auth config
+     * @param config the configuration section to parse
+     * @return the offline auth config, or the default if {@code config} is null
      */
     public static OfflineAuthConfig fromConfig(CommentedConfig config) {
       if (config == null) {
         return DEFAULT;
       }
       return new OfflineAuthConfig(
-          config.getOrElse("offline-auth", DEFAULT.enabled()),
-          config.getOrElse("auth-server-name", DEFAULT.serverName()),
-          config.getIntOrElse("auth-server-port", DEFAULT.serverPort())
+          config.getOrElse("enabled", DEFAULT.enabled()),
+          config.getOrElse("server-name", DEFAULT.serverName()),
+          config.getIntOrElse("server-port", DEFAULT.serverPort())
       );
     }
   }

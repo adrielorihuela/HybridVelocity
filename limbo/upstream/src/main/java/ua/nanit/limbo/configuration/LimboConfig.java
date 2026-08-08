@@ -45,6 +45,21 @@ public final class LimboConfig {
 
     private final Path root;
 
+    // HybridVelocity patch: the bind address and the player-info forwarding are supplied in code by
+    // the proxy and never read from settings.yml, so an operator cannot move this off loopback or
+    // set a forwarding mode that disagrees with the proxy's. They must be installed before load(),
+    // because an absent `infoForwarding` node makes the serializer throw. See docs/auth-server.md.
+    @Getter(lombok.AccessLevel.NONE)
+    private SocketAddress addressOverride;
+    @Getter(lombok.AccessLevel.NONE)
+    private InfoForwarding infoForwardingOverride;
+
+    /** HybridVelocity patch: supply the bind address and forwarding in code. */
+    public void override(SocketAddress address, InfoForwarding forwarding) {
+        this.addressOverride = address;
+        this.infoForwardingOverride = forwarding;
+    }
+
     private SocketAddress address;
     private int maxPlayers;
     private PingData pingData;
@@ -93,7 +108,8 @@ public final class LimboConfig {
 
         ConfigurationNode conf = loader.load();
 
-        address = conf.node("bind").get(SocketAddress.class);
+        address = addressOverride != null
+                ? addressOverride : conf.node("bind").get(SocketAddress.class);
         maxPlayers = conf.node("maxPlayers").getInt(100);
         pingData = conf.node("ping").get(PingData.class);
         dimensionType = conf.node("dimension").get(DimensionType.class, DimensionType.THE_END);
@@ -128,7 +144,8 @@ public final class LimboConfig {
             playerListFooter = conf.node("headerAndFooter", "footer").get(Component.class, Component.empty());
         }
 
-        infoForwarding = conf.node("infoForwarding").get(InfoForwarding.class);
+        infoForwarding = infoForwardingOverride != null
+                ? infoForwardingOverride : conf.node("infoForwarding").get(InfoForwarding.class);
         readTimeout = conf.node("readTimeout").getLong(30000);
         debugLevel = conf.node("debugLevel").getInt(2);
         logPlayersIp = conf.node("logPlayersIp").getBoolean(true);

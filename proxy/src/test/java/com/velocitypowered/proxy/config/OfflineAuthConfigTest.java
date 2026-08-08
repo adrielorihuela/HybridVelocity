@@ -40,7 +40,7 @@ class OfflineAuthConfigTest {
 
   @Test
   void defaultsMatchTheShippedConfiguration() {
-    assertEquals("Auth", OfflineAuthConfig.DEFAULT.serverName());
+    assertEquals("auth", OfflineAuthConfig.DEFAULT.serverName());
     assertEquals(30065, OfflineAuthConfig.DEFAULT.serverPort());
   }
 
@@ -51,11 +51,11 @@ class OfflineAuthConfigTest {
   }
 
   @Test
-  void optionsAreReadFromTheRootOfTheConfiguration() {
+  void sectionValuesAreRead() {
     final CommentedConfig config = CommentedConfig.inMemory();
-    config.set("offline-auth", false);
-    config.set("auth-server-name", "Login");
-    config.set("auth-server-port", 40000);
+    config.set("enabled", false);
+    config.set("server-name", "Login");
+    config.set("server-port", 40000);
 
     final OfflineAuthConfig parsed = OfflineAuthConfig.fromConfig(config);
 
@@ -67,7 +67,7 @@ class OfflineAuthConfigTest {
   @Test
   void missingOptionsFallBackToDefaults() {
     final CommentedConfig config = CommentedConfig.inMemory();
-    config.set("offline-auth", false);
+    config.set("enabled", false);
 
     final OfflineAuthConfig parsed = OfflineAuthConfig.fromConfig(config);
 
