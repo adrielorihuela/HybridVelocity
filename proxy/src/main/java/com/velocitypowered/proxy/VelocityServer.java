@@ -39,6 +39,9 @@ import com.velocitypowered.api.proxy.server.ServerInfo;
 import com.velocitypowered.api.util.Favicon;
 import com.velocitypowered.api.util.GameProfile;
 import com.velocitypowered.api.util.ProxyVersion;
+import com.velocitypowered.proxy.auth.OfflineAuthCommands;
+import com.velocitypowered.proxy.auth.OfflineAuthGate;
+import com.velocitypowered.proxy.auth.OfflineAuthManager;
 import com.velocitypowered.proxy.command.VelocityCommandManager;
 import com.velocitypowered.proxy.command.builtin.CallbackCommand;
 import com.velocitypowered.proxy.command.builtin.GlistCommand;
@@ -186,6 +189,8 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
   private final ServerListPingHandler serverListPingHandler;
   private final Set<String> registeredServerCommands = new LinkedHashSet<>();
   private @Nullable EmbeddedLimboServer limbo;
+  private @Nullable OfflineAuthManager offlineAuth;
+  private @Nullable OfflineAuthGate offlineAuthGate;
   private @Nullable RegisteredServer limboServer;
 
   VelocityServer(final ProxyOptions options) {
@@ -318,7 +323,7 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
 
     registerServerCommands(configuration.getServerCommands());
 
-    startLimbo(configuration.getOfflineAuthConfig());
+    startOfflineAuth(configuration.getOfflineAuthConfig());
 
     ipAttemptLimiter = Ratelimiters.createWithMilliseconds(configuration.getLoginRatelimit());
     commandRateLimiter = Ratelimiters.createWithMilliseconds(configuration.getCommandRatelimit());
@@ -400,8 +405,16 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
    * <limbo>} a working shortcut for anyone. {@link #createRawRegisteredServer} yields a fully
    * usable {@link RegisteredServer} without any of that.</p>
    */
-  private void startLimbo(final VelocityConfiguration.OfflineAuthConfig config) {
+  private void startOfflineAuth(final VelocityConfiguration.OfflineAuthConfig config) {
     if (!config.enabled()) {
+      return;
+    }
+
+    final OfflineAuthManager manager = new OfflineAuthManager(Path.of(config.databaseFile()));
+    if (!manager.start()) {
+      manager.shutdown();
+      logger.error("Offline authentication could not start. Offline players will be refused "
+          + "until this is fixed.");
       return;
     }
 
@@ -410,24 +423,58 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
     try {
       embedded.start(config.limboPort());
     } catch (Exception e) {
-      logger.error("Could not start the embedded limbo. Offline authentication is disabled for "
-          + "this session; unauthenticated players will be refused.", e);
+      manager.shutdown();
+      logger.error("Could not start the embedded limbo. Offline players will be refused until "
+          + "this is fixed.", e);
       return;
     }
 
+    this.offlineAuth = manager;
     this.limbo = embedded;
     this.limboServer = createRawRegisteredServer(
         new ServerInfo(LIMBO_SERVER_NAME, embedded.getAddress()));
+
+    final OfflineAuthGate gate = new OfflineAuthGate(this, manager);
+    this.offlineAuthGate = gate;
+    eventManager.register(VelocityVirtualPlugin.INSTANCE, gate);
+
+    registerBuiltinCommand(OfflineAuthCommands.register(manager, gate));
+    registerBuiltinCommand(OfflineAuthCommands.login(manager, gate));
+    registerBuiltinCommand(OfflineAuthCommands.changePassword(manager, gate));
   }
 
-  /** Stops the embedded limbo if it is running. */
-  private void stopLimbo() {
+  /** Stops the embedded limbo and the authentication database if they are running. */
+  private void stopOfflineAuth() {
+    final OfflineAuthGate gate = this.offlineAuthGate;
+    this.offlineAuthGate = null;
+    if (gate != null) {
+      gate.clear();
+      eventManager.unregisterListener(VelocityVirtualPlugin.INSTANCE, gate);
+      commandManager.unregister("register");
+      commandManager.unregister("login");
+      commandManager.unregister("changepassword");
+    }
+
     final EmbeddedLimboServer embedded = this.limbo;
     this.limbo = null;
     this.limboServer = null;
     if (embedded != null) {
       embedded.stop();
     }
+
+    final OfflineAuthManager manager = this.offlineAuth;
+    this.offlineAuth = null;
+    if (manager != null) {
+      manager.shutdown();
+    }
+  }
+
+  private void registerBuiltinCommand(final BrigadierCommand command) {
+    commandManager.register(
+        commandManager.metaBuilder(command)
+            .plugin(VelocityVirtualPlugin.INSTANCE)
+            .build(),
+        command);
   }
 
   /**
@@ -637,8 +684,8 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
     registerServerCommands(newConfiguration.getServerCommands());
 
     if (!newConfiguration.getOfflineAuthConfig().equals(configuration.getOfflineAuthConfig())) {
-      stopLimbo();
-      startLimbo(newConfiguration.getOfflineAuthConfig());
+      stopOfflineAuth();
+      startOfflineAuth(newConfiguration.getOfflineAuthConfig());
     }
 
     // If we have a new bind address, bind to it
@@ -730,7 +777,7 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
 
         timedOut = !scheduler.shutdown() || timedOut;
 
-        stopLimbo();
+        stopOfflineAuth();
 
         if (timedOut) {
           logger.error("Your plugins took over 10 seconds to shut down.");
