@@ -162,8 +162,6 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
       .create();
   private static final int PRE_SHUTDOWN_TIMEOUT =
             Integer.getInteger("velocity.pre-shutdown-timeout", 10);
-  /** Name of the internal server that holds players while they authenticate. */
-  private static final String AUTH_SERVER_NAME = InternalServers.AUTH;
 
   private final ConnectionManager cm;
   private final ProxyOptions options;
@@ -412,7 +410,8 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
       return;
     }
 
-    final OfflineAuthManager manager = new OfflineAuthManager(Path.of(config.databaseFile()));
+    final OfflineAuthManager manager = new OfflineAuthManager(
+        Path.of(VelocityConfiguration.OfflineAuthConfig.DATABASE_FILE));
     if (!manager.start()) {
       manager.shutdown();
       logger.error("Offline authentication could not start. Offline players will be refused "
@@ -423,7 +422,7 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
     final AuthServer embedded =
         new AuthServer(Path.of("auth"), configuration);
     try {
-      embedded.start(config.limboPort());
+      embedded.start(config.serverPort());
     } catch (Exception e) {
       manager.shutdown();
       logger.error("Could not start the authentication server. Offline players will be refused "
@@ -438,8 +437,9 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
     // backend's protocol version by pinging the servers it finds in getAllServers(); a server it
     // has never seen falls back to a pre-1.16 assumption and mis-decodes the login handshake. It is
     // hidden from command output by InternalServers instead.
-    final ServerInfo authInfo = new ServerInfo(AUTH_SERVER_NAME, embedded.getAddress());
-    servers.getServer(AUTH_SERVER_NAME)
+    InternalServers.setAuthServerName(config.serverName());
+    final ServerInfo authInfo = new ServerInfo(config.serverName(), embedded.getAddress());
+    servers.getServer(config.serverName())
         .ifPresent(existing -> servers.unregister(existing.getServerInfo()));
     this.authServerEntry = servers.register(authInfo);
 

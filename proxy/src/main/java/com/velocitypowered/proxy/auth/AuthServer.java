@@ -26,7 +26,7 @@ import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Objects;
+import java.util.List;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -40,11 +40,11 @@ import ua.nanit.limbo.server.LimboServer;
  * The authentication server: a limbo world run inside the proxy JVM, bound to loopback, where
  * players wait until they register or log in.
  *
- * <p>The operator never configures this. The settings file is written once from a documented
- * template, and afterwards it is left alone unless the two values the proxy owns — the bind port
- * and the forwarding that secures the loopback hop — no longer match. Rewriting through Configurate
- * would strip every comment, so it only happens when something genuinely changed, and it is logged
- * when it does.</p>
+ * <p>{@code auth/settings.yml} is written once from a documented template and then never touched
+ * again, so the operator's edits and its comments survive. The two values they must not set — the
+ * bind address, which has to stay on loopback, and the forwarding, which has to agree with the
+ * proxy's — are merged in at start-up into {@code auth/generated/settings.yml}, which is what
+ * actually runs.</p>
  *
  * <p>See {@code docs/auth-server.md}.</p>
  */
@@ -54,6 +54,11 @@ public final class AuthServer {
   private static final String SETTINGS_FILE = "settings.yml";
   private static final String TEMPLATE_RESOURCE = "/auth-server-settings.yml";
   private static final String LOOPBACK = "127.0.0.1";
+  private static final String RUNTIME_DIRECTORY = "generated";
+  private static final String GENERATED_HEADER = """
+      # Generated on every start by merging settings.yml one directory up with the bind address and
+      # player-info forwarding from hybridvelocity.toml. Edits here are lost; edit ../settings.yml.
+      """;
 
   private final Path directory;
   private final VelocityConfiguration configuration;
@@ -76,10 +81,10 @@ public final class AuthServer {
     final int boundPort = port == 0 ? findFreePort() : port;
 
     Files.createDirectories(directory);
-    writeSettings(boundPort);
+    final Path runtime = writeSettings(boundPort);
 
     final LimboServer server = new LimboServer();
-    server.startEmbedded(directory);
+    server.startEmbedded(runtime);
 
     this.limbo = server;
     this.address = new InetSocketAddress(LOOPBACK, boundPort);
@@ -102,7 +107,7 @@ public final class AuthServer {
   }
 
   /**
-   * Returns the address the limbo is listening on.
+   * Returns the address the authentication server is listening on.
    *
    * @return the address, or {@code null} if it is not running
    */
@@ -110,78 +115,63 @@ public final class AuthServer {
     return address;
   }
 
-  private void writeSettings(final int port) throws IOException {
+  /**
+   * Produces the settings the server actually runs from, and returns the directory holding them.
+   *
+   * <p>The operator's file never carries the bind address or the forwarding: those are not theirs
+   * to set. Binding anywhere but loopback would expose an unauthenticated world to the network, and
+   * a forwarding mode that disagrees with the proxy's breaks the handshake. So the editable file is
+   * merged with those two values into {@code generated/settings.yml}, which is what
+   * {@link LimboServer} reads, and which is rewritten on every start.</p>
+   *
+   * @param port the loopback port to bind
+   * @return the directory containing the generated settings
+   */
+  private Path writeSettings(final int port) throws IOException {
     final Path settings = directory.resolve(SETTINGS_FILE);
-    final PlayerInfoForwarding forwarding = configuration.getPlayerInfoForwardingMode();
-    final String type = toLimboForwardingType(forwarding);
-    final String secret =
-        new String(configuration.getForwardingSecret(), StandardCharsets.UTF_8);
-
     if (!Files.exists(settings)) {
-      writeTemplate(settings, port, type, secret);
-      return;
+      writeTemplate(settings);
     }
 
-    if (!managedValuesDiffer(settings, port, type, secret)) {
-      return;
+    final CommentedConfigurationNode root = loader(settings).load();
+    try {
+      root.node("bind", "ip").set(LOOPBACK);
+      root.node("bind", "port").set(port);
+
+      final PlayerInfoForwarding forwarding = configuration.getPlayerInfoForwardingMode();
+      final String type = toLimboForwardingType(forwarding);
+      final String secret =
+          new String(configuration.getForwardingSecret(), StandardCharsets.UTF_8);
+
+      root.node("infoForwarding", "type").set(type);
+      root.node("infoForwarding", "secret").set(secret);
+      // BUNGEE_GUARD reads the shared secret from the token list instead of `secret`.
+      root.node("infoForwarding", "tokens")
+          .setList(String.class, List.of("BUNGEE_GUARD".equals(type) ? secret : ""));
+    } catch (SerializationException e) {
+      throw new IOException("Could not build the authentication server settings", e);
     }
 
-    logger.info("The limbo bind port or forwarding mode changed; rewriting {}. Comments in that "
-        + "file are not preserved by the rewrite.", settings);
-    rewriteManagedValues(settings, port, type, secret);
+    final Path runtime = directory.resolve(RUNTIME_DIRECTORY);
+    Files.createDirectories(runtime);
+    final Path runtimeSettings = runtime.resolve(SETTINGS_FILE);
+    loader(runtimeSettings).save(root);
+    Files.writeString(runtimeSettings,
+        GENERATED_HEADER + Files.readString(runtimeSettings, StandardCharsets.UTF_8),
+        StandardCharsets.UTF_8);
+
+    return runtime;
   }
 
-  /** Writes the documented template, which is the only path that preserves its comments. */
-  private static void writeTemplate(final Path settings, final int port, final String type,
-      final String secret) throws IOException {
-    final String template;
+  /** Writes the documented template the operator edits. */
+  private static void writeTemplate(final Path settings) throws IOException {
     try (InputStream in = AuthServer.class.getResourceAsStream(TEMPLATE_RESOURCE)) {
       if (in == null) {
         throw new IOException(
             "The bundled authentication server settings are missing from the jar");
       }
-      template = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+      Files.copy(in, settings);
     }
-
-    // BUNGEE_GUARD reads the shared secret from the token list instead of `secret`.
-    final String tokens = "BUNGEE_GUARD".equals(type)
-        ? "    - \"" + secret + "\""
-        : "    - \"\"";
-
-    final String rendered = template
-        .replace("{{PORT}}", Integer.toString(port))
-        .replace("{{FORWARDING_TYPE}}", type)
-        .replace("{{FORWARDING_SECRET}}", secret)
-        .replace("{{FORWARDING_TOKENS}}", tokens);
-
-    Files.writeString(settings, rendered, StandardCharsets.UTF_8);
-  }
-
-  private static boolean managedValuesDiffer(final Path settings, final int port,
-      final String type, final String secret) throws IOException {
-    final CommentedConfigurationNode root = loader(settings).load();
-    return root.node("bind", "port").getInt(-1) != port
-        || !LOOPBACK.equals(root.node("bind", "ip").getString())
-        || !type.equals(root.node("infoForwarding", "type").getString())
-        || !Objects.equals(secret, root.node("infoForwarding", "secret").getString());
-  }
-
-  private static void rewriteManagedValues(final Path settings, final int port, final String type,
-      final String secret) throws IOException {
-    final YamlConfigurationLoader loader = loader(settings);
-    final CommentedConfigurationNode root = loader.load();
-    try {
-      root.node("bind", "ip").set(LOOPBACK);
-      root.node("bind", "port").set(port);
-      root.node("infoForwarding", "type").set(type);
-      root.node("infoForwarding", "secret").set(secret);
-      if ("BUNGEE_GUARD".equals(type)) {
-        root.node("infoForwarding", "tokens").setList(String.class, java.util.List.of(secret));
-      }
-    } catch (SerializationException e) {
-      throw new IOException("Could not update the authentication server settings", e);
-    }
-    loader.save(root);
   }
 
   private static YamlConfigurationLoader loader(final Path settings) {

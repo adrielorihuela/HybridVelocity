@@ -34,10 +34,30 @@ import java.util.Locale;
  */
 public final class InternalServers {
 
-  /** The server that holds players while they authenticate. */
-  public static final String AUTH = "Auth";
+  /** The default name of the server that holds players while they authenticate. */
+  public static final String DEFAULT_AUTH = "Auth";
+
+  private static volatile String authName = DEFAULT_AUTH;
 
   private InternalServers() {
+  }
+
+  /**
+   * Sets the name the authentication server is registered under, from {@code auth-server-name}.
+   *
+   * @param name the configured name
+   */
+  public static void setAuthServerName(final String name) {
+    authName = name;
+  }
+
+  /**
+   * Returns the name the authentication server is registered under.
+   *
+   * @return the configured name
+   */
+  public static String authServerName() {
+    return authName;
   }
 
   /**
@@ -47,7 +67,7 @@ public final class InternalServers {
    * @return {@code true} for internal servers
    */
   public static boolean isInternal(final String name) {
-    return AUTH.equalsIgnoreCase(name);
+    return authName.equalsIgnoreCase(name);
   }
 
   /**

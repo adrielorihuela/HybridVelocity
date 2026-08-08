@@ -29,51 +29,50 @@ import org.junit.jupiter.api.Test;
 class OfflineAuthConfigTest {
 
   @Test
-  void absentSectionYieldsTheDefault() {
+  void absentOptionsYieldTheDefault() {
     assertSame(OfflineAuthConfig.DEFAULT, OfflineAuthConfig.fromConfig(null));
   }
 
   @Test
-  void offlineAuthIsDisabledByDefault() {
-    // Upgrading must not change behaviour for anyone who does not opt in.
-    assertFalse(OfflineAuthConfig.DEFAULT.enabled());
+  void offlineAuthIsOnByDefault() {
+    assertTrue(OfflineAuthConfig.DEFAULT.enabled());
   }
 
   @Test
-  void limboPortDefaultsToFixedPort() {
-    assertEquals(30065, OfflineAuthConfig.DEFAULT.limboPort());
+  void defaultsMatchTheShippedConfiguration() {
+    assertEquals("Auth", OfflineAuthConfig.DEFAULT.serverName());
+    assertEquals(30065, OfflineAuthConfig.DEFAULT.serverPort());
   }
 
   @Test
-  void databaseLivesInTheAuthDirectory() {
-    // Keeping it beside hybridvelocity.toml made it easy to delete by accident, which would wipe
-    // every registration.
-    assertEquals("auth/player-passwords.db", OfflineAuthConfig.DEFAULT.databaseFile());
+  void databaseLocationIsNotConfigurable() {
+    // It is the only copy of every registration; letting it be moved invites losing track of it.
+    assertEquals("auth/player-passwords.db", OfflineAuthConfig.DATABASE_FILE);
   }
 
   @Test
-  void sectionValuesAreRead() {
+  void optionsAreReadFromTheRootOfTheConfiguration() {
     final CommentedConfig config = CommentedConfig.inMemory();
-    config.set("enabled", true);
-    config.set("limbo-port", 30099);
-    config.set("database-file", "auth/players.db");
+    config.set("offline-auth", false);
+    config.set("auth-server-name", "Login");
+    config.set("auth-server-port", 40000);
 
     final OfflineAuthConfig parsed = OfflineAuthConfig.fromConfig(config);
 
-    assertTrue(parsed.enabled());
-    assertEquals(30099, parsed.limboPort());
-    assertEquals("auth/players.db", parsed.databaseFile());
+    assertFalse(parsed.enabled());
+    assertEquals("Login", parsed.serverName());
+    assertEquals(40000, parsed.serverPort());
   }
 
   @Test
-  void missingKeysFallBackToDefaults() {
+  void missingOptionsFallBackToDefaults() {
     final CommentedConfig config = CommentedConfig.inMemory();
-    config.set("enabled", true);
+    config.set("offline-auth", false);
 
     final OfflineAuthConfig parsed = OfflineAuthConfig.fromConfig(config);
 
-    assertTrue(parsed.enabled());
-    assertEquals(OfflineAuthConfig.DEFAULT.limboPort(), parsed.limboPort());
-    assertEquals(OfflineAuthConfig.DEFAULT.databaseFile(), parsed.databaseFile());
+    assertFalse(parsed.enabled());
+    assertEquals(OfflineAuthConfig.DEFAULT.serverName(), parsed.serverName());
+    assertEquals(OfflineAuthConfig.DEFAULT.serverPort(), parsed.serverPort());
   }
 }

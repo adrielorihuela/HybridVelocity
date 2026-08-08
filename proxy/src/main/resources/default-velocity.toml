@@ -1,5 +1,5 @@
 # Config version. Do not change this
-config-version = "3.0"
+config-version = "3.1"
 
 # What port should the proxy be bound to? By default, we'll bind to all addresses on port 25565.
 bind = "0.0.0.0:25565"
@@ -14,6 +14,25 @@ show-max-players = 500
 
 # Should we authenticate players with Mojang? By default, this is on.
 online-mode = true
+
+# Should players that Mojang could not authenticate be asked to register a password?
+# They wait on an authentication server that runs inside this proxy - there is nothing extra to
+# install - and only reach your real servers once they register or log in.
+# Premium players are unaffected.
+# Passwords are stored in auth/player-passwords.db. Do not delete that file: it is the only copy,
+# and losing it lets anyone claim a name by registering it first.
+offline-auth = true
+
+# The name the authentication server is registered under. It is hidden from /server, /glist, /send
+# and tab completion, but plugins can still see it - ViaVersion needs to, to learn its protocol
+# version. It must not match any server in [servers].
+auth-server-name = "Auth"
+
+# Port the authentication server listens on, bound to 127.0.0.1 only, so it is unreachable from
+# outside this machine. It needs a port of its own: two listeners cannot share one, and a server
+# with no socket could not be pinged by ViaVersion.
+# Set 0 to let the system pick a free port on each start.
+auth-server-port = 30065
 
 # Should the proxy enforce the new public key security standard? By default, this is on.
 force-key-authentication = true
@@ -86,26 +105,6 @@ bytes-per-second = -1
 # Protects against compression bomb attacks where small packets expand to excessive sizes after decompression.
 # -1 disables this check.
 decompressed-bytes-per-second = 5242880
-
-[offline-auth]
-# Hold players that Mojang could not authenticate on the proxy until they register or log in.
-# They wait in a limbo world that runs inside this proxy - there is no extra server to install.
-# Premium players are unaffected. Disabled by default.
-enabled = false
-
-# Port the embedded limbo listens on. It is bound to 127.0.0.1 only, so it is not reachable
-# from outside this machine. Set 0 to let the system pick a free port automatically.
-limbo-port = 30065
-
-# Where the registered passwords are stored, relative to the proxy directory.
-#
-# DO NOT DELETE, MOVE OR EDIT THIS FILE. It is an SQLite database holding every player's
-# password, and it is the only copy. Deleting it erases every registration: each player would be
-# asked to register again, and until they did, anyone could claim their name by registering it
-# first. Back it up along with the rest of your server data.
-#
-# The passwords themselves are stored as bcrypt hashes and cannot be read back out of the file.
-database-file = "auth/player-passwords.db"
 
 [servers]
 # Configure your servers here. Each key represents the server's name, and the value

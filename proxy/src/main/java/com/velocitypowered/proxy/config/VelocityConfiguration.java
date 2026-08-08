@@ -206,17 +206,23 @@ public class VelocityConfiguration implements ProxyConfig {
     }
 
     if (offlineAuthConfig.enabled()) {
-      if (offlineAuthConfig.limboPort() < 0 || offlineAuthConfig.limboPort() > 65535) {
-        logger.error("[offline-auth] limbo-port {} is not a valid port.",
-            offlineAuthConfig.limboPort());
+      if (offlineAuthConfig.serverPort() < 0 || offlineAuthConfig.serverPort() > 65535) {
+        logger.error("'auth-server-port' {} is not a valid port.", offlineAuthConfig.serverPort());
         valid = false;
       }
-      if (offlineAuthConfig.databaseFile().isBlank()) {
-        logger.error("[offline-auth] database-file must not be empty.");
+      if (offlineAuthConfig.serverName().isBlank()) {
+        logger.error("'auth-server-name' must not be empty.");
         valid = false;
+      }
+      for (String configured : servers.getServers().keySet()) {
+        if (configured.equalsIgnoreCase(offlineAuthConfig.serverName())) {
+          logger.error("'auth-server-name' is '{}', which is also a server in [servers]. Pick a "
+              + "name no configured server uses.", offlineAuthConfig.serverName());
+          valid = false;
+        }
       }
       if (servers.getAttemptConnectionOrder().isEmpty()) {
-        logger.error("[offline-auth] is enabled but 'try' is empty, so there would be nowhere to "
+        logger.error("'offline-auth' is enabled but 'try' is empty, so there would be nowhere to "
             + "send players after they authenticate.");
         valid = false;
       }
@@ -603,8 +609,7 @@ public class VelocityConfiguration implements ProxyConfig {
       final CommentedConfig advancedConfig = config.get("advanced");
       final CommentedConfig queryConfig = config.get("query");
       final CommentedConfig metricsConfig = config.get("metrics");
-      final OfflineAuthConfig offlineAuthConfig =
-              OfflineAuthConfig.fromConfig(config.get("offline-auth"));
+      final OfflineAuthConfig offlineAuthConfig = OfflineAuthConfig.fromConfig(config);
       final PlayerInfoForwarding forwardingMode = config.getEnumOrElse(
               "player-info-forwarding-mode", PlayerInfoForwarding.NONE);
       final PingPassthroughMode pingPassthroughMode = config.getEnumOrElse("ping-passthrough",
@@ -1072,34 +1077,38 @@ public class VelocityConfiguration implements ProxyConfig {
   }
 
   /**
-   * Settings for the offline authentication gate and the embedded limbo that holds players while
-   * they authenticate. See {@code docs/offline-auth-plan.md}.
+   * Settings for the offline authentication gate and the server that holds players while they
+   * authenticate. See {@code docs/offline-auth.md}.
    *
    * @param enabled whether unauthenticated offline players are held for a register/login gate
-   * @param limboPort the loopback port for the embedded limbo, or {@code 0} to pick a free one
-   * @param databaseFile the SQLite file storing password records, relative to the proxy directory
+   * @param serverName the name the authentication server is registered under
+   * @param serverPort the loopback port it listens on, or {@code 0} to pick a free one
    */
-  public record OfflineAuthConfig(boolean enabled, int limboPort, String databaseFile) {
-
-    public static final OfflineAuthConfig DEFAULT =
-        new OfflineAuthConfig(false, 30065, "auth/player-passwords.db");
+  public record OfflineAuthConfig(boolean enabled, String serverName, int serverPort) {
 
     /**
-     * Returns an OfflineAuthConfig from a config section, or the default if the section is null.
+     * Where password records are stored. Deliberately not configurable: it is the only copy of
+     * every registration, and letting it be moved or renamed invites losing track of it.
+     */
+    public static final String DATABASE_FILE = "auth/player-passwords.db";
+
+    public static final OfflineAuthConfig DEFAULT = new OfflineAuthConfig(true, "Auth", 30065);
+
+    /**
+     * Reads the offline authentication options from the root of the configuration.
      *
-     * @param config the configuration object to parse
-     * @return the offline auth config, or the default if {@code config} is null
+     * @param config the whole configuration
+     * @return the offline auth config
      */
     public static OfflineAuthConfig fromConfig(CommentedConfig config) {
-      if (config != null) {
-        return new OfflineAuthConfig(
-            config.getOrElse("enabled", DEFAULT.enabled()),
-            config.getIntOrElse("limbo-port", DEFAULT.limboPort()),
-            config.getOrElse("database-file", DEFAULT.databaseFile())
-        );
-      } else {
+      if (config == null) {
         return DEFAULT;
       }
+      return new OfflineAuthConfig(
+          config.getOrElse("offline-auth", DEFAULT.enabled()),
+          config.getOrElse("auth-server-name", DEFAULT.serverName()),
+          config.getIntOrElse("auth-server-port", DEFAULT.serverPort())
+      );
     }
   }
 

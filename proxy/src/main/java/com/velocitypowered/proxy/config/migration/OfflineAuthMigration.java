@@ -23,52 +23,57 @@ import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 import org.apache.logging.log4j.Logger;
 
 /**
- * Configuration migration for the new [offline-auth] section, added by HybridVelocity.
+ * Configuration migration for the offline authentication options, added by HybridVelocity.
  *
- * <p>An absent section already yields the defaults, so this migration exists purely so that
- * operators upgrading an existing {@code hybridvelocity.toml} can see and enable the feature. It is
- * written disabled, leaving behaviour unchanged until it is turned on deliberately.</p>
+ * <p>They started life as an {@code [offline-auth]} section and are now three top-level keys
+ * sitting next to {@code online-mode}, which is the option they belong with. Whatever the operator
+ * had chosen in the old section is carried across; only genuinely absent keys get a default.</p>
  */
 public final class OfflineAuthMigration implements ConfigurationMigration {
 
   @Override
   public boolean shouldMigrate(CommentedFileConfig config) {
-    return configVersion(config) < 3.0;
+    return configVersion(config) < 3.1;
   }
 
   @Override
   public void migrate(CommentedFileConfig config, Logger logger) {
-    // Only seed keys that are absent: an operator who already enabled this, moved the database or
-    // pinned a port must not have those choices reset by an upgrade.
-    if (!config.contains("offline-auth.enabled")) {
-      config.set("offline-auth.enabled", DEFAULT.enabled());
+    // Carry over the old [offline-auth] section if this config had one.
+    final Boolean previouslyEnabled = config.get("offline-auth.enabled");
+    final Integer previousPort = config.get("offline-auth.limbo-port");
+    if (previouslyEnabled != null || previousPort != null) {
+      logger.info("Moving the [offline-auth] section to the 'offline-auth', 'auth-server-name' "
+          + "and 'auth-server-port' options.");
     }
-    if (!config.contains("offline-auth.limbo-port")) {
-      config.set("offline-auth.limbo-port", DEFAULT.limboPort());
+    config.remove("offline-auth");
+
+    config.set("offline-auth",
+        previouslyEnabled != null ? previouslyEnabled : DEFAULT.enabled());
+    if (!config.contains("auth-server-name")) {
+      config.set("auth-server-name", DEFAULT.serverName());
     }
-    if (!config.contains("offline-auth.database-file")) {
-      config.set("offline-auth.database-file", DEFAULT.databaseFile());
-    }
+    config.set("auth-server-port",
+        previousPort != null ? previousPort : DEFAULT.serverPort());
 
-    config.setComment("offline-auth.enabled", """
-        Hold players that Mojang could not authenticate on the proxy until they register or log in.
-        They wait in a limbo world that runs inside this proxy - there is no extra server to install.
-        Premium players are unaffected. Disabled by default.""");
+    config.setComment("offline-auth", """
+        Should players that Mojang could not authenticate be asked to register a password?
+        They wait on an authentication server that runs inside this proxy - there is nothing extra
+        to install - and only reach your real servers once they register or log in.
+        Premium players are unaffected.
+        Passwords are stored in auth/player-passwords.db. Do not delete that file: it is the only
+        copy, and losing it lets anyone claim a name by registering it first.""");
 
-    config.setComment("offline-auth.limbo-port", """
-        Port the embedded limbo listens on. It is bound to 127.0.0.1 only, so it is not reachable
-        from outside this machine. Set 0 to let the system pick a free port automatically.""");
+    config.setComment("auth-server-name", """
+        The name the authentication server is registered under. It is hidden from /server, /glist,
+        /send and tab completion, but plugins can still see it - ViaVersion needs to, to learn its
+        protocol version. It must not match any server in [servers].""");
 
-    config.setComment("offline-auth.database-file", """
-        Where the registered passwords are stored, relative to the proxy directory.
+    config.setComment("auth-server-port", """
+        Port the authentication server listens on, bound to 127.0.0.1 only, so it is unreachable
+        from outside this machine. It needs a port of its own: two listeners cannot share one, and
+        a server with no socket could not be pinged by ViaVersion.
+        Set 0 to let the system pick a free port on each start.""");
 
-        DO NOT DELETE, MOVE OR EDIT THIS FILE. It is an SQLite database holding every player's
-        password, and it is the only copy. Deleting it erases every registration: each player would be
-        asked to register again, and until they did, anyone could claim their name by registering it
-        first. Back it up along with the rest of your server data.
-
-        The passwords themselves are stored as bcrypt hashes and cannot be read back out of the file.""");
-
-    config.set("config-version", "3.0");
+    config.set("config-version", "3.1");
   }
 }
