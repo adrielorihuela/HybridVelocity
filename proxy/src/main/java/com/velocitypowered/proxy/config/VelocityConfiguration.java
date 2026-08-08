@@ -526,10 +526,10 @@ public class VelocityConfiguration implements ProxyConfig {
   }
 
   /**
-   * Reads the Velocity configuration from {@code path}.
+   * Reads the proxy configuration from {@code path}.
    *
    * @param path the path to read from
-   * @return the deserialized Velocity configuration
+   * @return the deserialized configuration
    * @throws IOException if we could not read from the {@code path}.
    */
   @SuppressFBWarnings(value = "RCN_REDUNDANT_NULLCHECK_WOULD_HAVE_BEEN_A_NPE",

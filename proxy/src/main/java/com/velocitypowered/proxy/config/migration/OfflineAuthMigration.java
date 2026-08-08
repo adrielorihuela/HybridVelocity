@@ -26,7 +26,7 @@ import org.apache.logging.log4j.Logger;
  * Configuration migration for the new [offline-auth] section, added by HybridVelocity.
  *
  * <p>An absent section already yields the defaults, so this migration exists purely so that
- * operators upgrading an existing {@code velocity.toml} can see and enable the feature. It is
+ * operators upgrading an existing {@code hybridvelocity.toml} can see and enable the feature. It is
  * written disabled, leaving behaviour unchanged until it is turned on deliberately.</p>
  */
 public final class OfflineAuthMigration implements ConfigurationMigration {
