@@ -25,6 +25,10 @@ tasks {
     }
 
     jar {
+        // The thin jar: HybridVelocity-<forkVersion>.jar
+        archiveBaseName.set(forkName)
+        archiveVersion.set(forkVersion)
+
         manifest {
             attributes["Implementation-Title"] = forkName
             attributes["Implementation-Vendor"] = "HybridVelocity Contributors"
@@ -33,10 +37,10 @@ tasks {
     }
 
     shadowJar {
-        // Produces HybridVelocity-<forkVersion>.jar instead of velocity-proxy-<version>-all.jar.
+        // The runnable distributable: HybridVelocity-<forkVersion>-all.jar
         archiveBaseName.set(forkName)
         archiveVersion.set(forkVersion)
-        archiveClassifier.set("")
+        archiveClassifier.set("all")
 
         manifest {
             attributes["Implementation-Title"] = forkName
