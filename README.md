@@ -34,10 +34,11 @@ See [docs/server-commands.md](docs/server-commands.md).
 
 ### Offline player authentication
 
-Players Mojang cannot authenticate can be required to register a password and log in before
-they reach any of your servers. They wait in a limbo world that runs **inside the proxy** —
-no extra server to install or configure — and passwords are stored as bcrypt hashes in an
-embedded SQLite database. Off by default. See [docs/offline-auth.md](docs/offline-auth.md).
+Players Mojang cannot authenticate are asked to register a password and log in before they
+reach any of your servers. They wait on an authentication server that runs **inside the proxy**
+— no extra server to install or configure — and passwords are stored as bcrypt hashes in an
+embedded SQLite database. On by default.
+See [docs/offline-auth.md](docs/offline-auth.md).
 
 ## Building
 

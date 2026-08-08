@@ -14,11 +14,12 @@ Fork-specific behaviour:
   Mojang session server returns 204, the player is accepted with a `.`-suffixed username and
   an offline UUID derived from it, instead of being disconnected. See
   `docs/hybrid-offline-profiles.md`.
-- **Offline authentication** (`proxy/.../auth/`, `[offline-auth]`) — unauthenticated offline
-  players are held in an embedded limbo until they `/register` or `/login`. See
-  `docs/offline-auth.md`.
-- **Embedded limbo** (`:limbo` module) — a vendored copy of NanoLimbo run in-process. See
-  `docs/limbo.md`.
+- **Offline authentication** (`proxy/.../auth/`, `offline-auth` in the config) — unauthenticated
+  offline players are held on an authentication server until they `/register` or `/login`. On by
+  default. See `docs/offline-auth.md`.
+- **The authentication server** (`:limbo` module, `auth/AuthServer.java`) — a vendored copy of
+  NanoLimbo run in-process. "Limbo" is only the upstream project's name; everything
+  operator-facing calls it the authentication server. See `docs/auth-server.md`.
 - **Per-server shortcut commands** (`command/builtin/ServerShortcutCommand.java`, registered
   from `VelocityServer#registerServerCommands`) — the `comandos` list in `[servers]`.
   See `docs/server-commands.md`.
@@ -122,22 +123,29 @@ in place — add one when an existing key changes shape.
 `native/` provides libdeflate/OpenSSL acceleration with pure-Java fallbacks, so nothing may
 assume the native path is available. `limbo/` is vendored third-party source — see below.
 
-### The embedded limbo and its subtree
+### The authentication server and its subtree
 
 `limbo/upstream/` is a pristine `git subtree` of [NanoLimbo](https://github.com/Nan1t/NanoLimbo)
 (GPL-3.0, same licence as this fork). The module's build script sits *outside* the subtree and
 points `sourceSets` into it, so upstream stays byte-identical and `git subtree pull` does not
 conflict. Two upstream files carry local patches, both marked `HybridVelocity patch:` and listed
-in `docs/limbo.md` — keep that list accurate and the patch surface small.
+in `docs/auth-server.md` — keep that list accurate and the patch surface small.
 
 **Checkstyle is disabled and Spotless excludes `upstream/**` for that module.** This is a
 licensing requirement, not a style preference: `velocity-spotless` applies
 `licenseHeaderFile(HEADER.txt)`, which replaces everything above the `package` declaration and
 would rewrite NanoLimbo's GPL copyright notices to "Velocity Contributors".
 
-`EmbeddedLimboServer` writes `auth/settings.yml` once from the documented template at
-`proxy/src/main/resources/limbo-settings.yml`, then leaves it alone unless the bind port or
-forwarding mode changed — reloading and re-saving through Configurate strips every comment.
+`AuthServer` writes `auth/settings.yml` once from the documented template at
+`proxy/src/main/resources/auth-server-settings.yml` and then never touches it again, so its comments
+survive Configurate, which strips them on save. The bind address and forwarding are deliberately
+absent from that file — the operator must not be able to move it off loopback or disagree with the
+proxy's forwarding mode — and are merged in at start-up into `auth/generated/settings.yml`, which is
+what actually runs.
+
+The password database is at a fixed `auth/player-passwords.db`. It needs its own TCP port: two
+listeners cannot share one (`SO_REUSEPORT` load-balances rather than multiplexes), and a socketless
+in-JVM transport would not be pingable by ViaVersion, which the section below depends on.
 
 ### Offline authentication
 
@@ -152,11 +160,19 @@ Blocking work stays off the event loops: `AuthDatabase` serialises JDBC on one t
 `FAILED` from `NOT_REGISTERED`, so a broken database cannot offer `/register` for an account
 that already exists.
 
-**The limbo is a normally registered server.** It was once kept out of the `ServerMap` to hide
-it, which broke ViaVersion: Via pings every server in `getAllServers()` to learn its protocol,
+**The authentication server is registered normally.** It was once kept out of the `ServerMap` to
+hide it, which broke ViaVersion: Via pings every server in `getAllServers()` to learn its protocol,
 and a server it cannot see falls back to a pre-1.16 assumption and mis-decodes the login. It is
 hidden from command output through `server/InternalServers.java` instead — add any new
-player-facing server listing to that filter rather than un-registering things.
+player-facing server listing to that filter rather than un-registering things. Its name comes from
+`auth-server-name`, so `InternalServers` is told it at start-up rather than holding a constant.
+
+**`/register` and `/login` are load-bearing.** They are the only way past the gate, so they carry no
+permission node (nothing for a permissions plugin to revoke), are re-allowed at `PostOrder.LAST` if
+another plugin's `CommandExecuteEvent` listener denies them, and are re-registered after
+`ProxyInitializeEvent` if a plugin overwrote the alias. Which of the two a player sees is decided in
+the `PlayerAvailableCommandsEvent` handler, which returns an `EventTask` so the packet waits for the
+database lookup — the `requires` predicates run earlier, while the answer is still unknown.
 
 ### Commands and permissions
 

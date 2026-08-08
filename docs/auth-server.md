@@ -1,8 +1,11 @@
-# The embedded limbo server
+# The authentication server
 
 HybridVelocity bundles [NanoLimbo](https://github.com/Nan1t/NanoLimbo) (GPL-3.0, the same licence
 this fork carries) as the holding area for players who have not authenticated yet. It runs
 **in-process** inside the proxy JVM — there is no second process to install, configure or monitor.
+
+"Limbo" is the upstream project's name for the technique. Everything an operator sees calls it the
+authentication server, including the `[Auth]` prefix in the console.
 
 The rationale, and the options rejected to get here, are in
 [offline-auth-plan.md](offline-auth-plan.md).
@@ -54,20 +57,22 @@ Both patches are marked in the source with a `HybridVelocity patch:` comment.
 
 ## Configuration
 
-The limbo runs from `auth/settings.yml`, written once from
-`proxy/src/main/resources/limbo-settings.yml` with a comment on every option. Defaults are silent
-and cheap: no join message, boss bar, title, brand or tab list, spectator game mode, one Netty
-thread each way, and tight traffic limits.
+`auth/settings.yml` is written once from `proxy/src/main/resources/auth-server-settings.yml` with a
+comment on every option, and then never touched again — Configurate strips comments when it saves,
+so the only way to keep them is not to rewrite the file. Defaults are silent and cheap: no join
+message, boss bar, title, brand or tab list, spectator game mode, one Netty thread each way, and
+tight traffic limits.
 
-`dimension: THE_END` is load-bearing rather than cosmetic. The limbo sends no chunk data at all, so
+`dimension: THE_END` is load-bearing rather than cosmetic. The server sends no chunk data at all, so
 the client renders only the dimension's sky, and the End's is a fixed dark backdrop with no sun,
 moon, clouds or horizon — looking around shows no movement, which is what makes it read as a
 waiting screen. The Overworld would show a moving sky and give it away.
 
-Only two keys belong to the proxy: `bind`, always loopback, and `infoForwarding`, matched to the
-proxy's own mode so the loopback hop is authenticated like any other backend. The file is rewritten
-only when one of those changes, because reloading and re-saving it through Configurate strips every
-comment.
+`bind` and `infoForwarding` are deliberately absent from that file. Binding anywhere but loopback
+would expose an unauthenticated world to the network, and a forwarding mode that disagrees with the
+proxy's breaks the handshake, so neither is the operator's to set. At start-up the proxy merges them
+in from `hybridvelocity.toml` and writes the result to `auth/generated/settings.yml`, which is what
+`LimboServer` actually reads and which is overwritten every time.
 
 Two things are deliberately **not** patched:
 

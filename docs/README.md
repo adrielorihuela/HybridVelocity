@@ -7,8 +7,8 @@ covered here behaves exactly like [Velocity](https://docs.papermc.io/velocity).
 | --- | --- |
 | [server-commands.md](server-commands.md) | The `comandos` option: per-server shortcut commands and their permissions. |
 | [hybrid-offline-profiles.md](hybrid-offline-profiles.md) | How offline players are accepted on an online-mode proxy. |
-| [offline-auth.md](offline-auth.md) | Offline player authentication: the register/login gate and how to enable it. |
-| [limbo.md](limbo.md) | The embedded limbo server, its vendored subtree and local patches. |
+| [offline-auth.md](offline-auth.md) | Offline player authentication: the register/login gate and how to configure it. |
+| [auth-server.md](auth-server.md) | The embedded authentication server, its vendored subtree and local patches. |
 | [update-plan.md](update-plan.md) | Functional specification the offline authentication implements. |
 
 ## Offline authentication — background
