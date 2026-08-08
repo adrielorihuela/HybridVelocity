@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.velocitypowered.api.command.BrigadierCommand;
+import com.velocitypowered.api.command.CommandMeta;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyPreShutdownEvent;
 import com.velocitypowered.api.event.proxy.ProxyReloadEvent;
@@ -333,6 +334,8 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
     // to fully initialize before we accept any connections to the server.
     eventManager.fire(new ProxyInitializeEvent()).join();
 
+    reclaimAuthCommands();
+
     // init console permissions after plugins are loaded
     console.setupPermissions();
 
@@ -478,6 +481,39 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
     if (manager != null) {
       manager.shutdown();
     }
+  }
+
+  /**
+   * Re-registers the authentication commands if a plugin replaced them while loading.
+   *
+   * <p>{@code CommandManager#register} silently overwrites an existing alias — the registrar does
+   * {@code removeChildByName} then {@code addChild} with no ownership check — and nothing is fired
+   * when it happens. Since {@code /register} and {@code /login} are the only way past the gate,
+   * losing them would leave every offline player stuck with no way in, so ownership is checked once
+   * after plugins have initialised.</p>
+   */
+  private void reclaimAuthCommands() {
+    final OfflineAuthManager manager = this.offlineAuth;
+    final OfflineAuthGate gate = this.offlineAuthGate;
+    if (manager == null || gate == null) {
+      return;
+    }
+
+    reclaimAuthCommand("register", OfflineAuthCommands.register(manager, gate));
+    reclaimAuthCommand("login", OfflineAuthCommands.login(manager, gate));
+    reclaimAuthCommand("changepassword", OfflineAuthCommands.changePassword(manager, gate));
+  }
+
+  private void reclaimAuthCommand(final String alias, final BrigadierCommand replacement) {
+    final CommandMeta meta = commandManager.getCommandMeta(alias);
+    if (meta != null && meta.getPlugin() == VelocityVirtualPlugin.INSTANCE) {
+      return;
+    }
+
+    logger.warn("A plugin replaced /{}, which offline players need to authenticate. Restoring the "
+        + "built-in command.", alias);
+    commandManager.unregister(alias);
+    registerBuiltinCommand(replacement);
   }
 
   private void registerBuiltinCommand(final BrigadierCommand command) {

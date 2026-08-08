@@ -18,6 +18,8 @@
 package com.velocitypowered.proxy.auth;
 
 import com.mojang.brigadier.tree.CommandNode;
+import com.mojang.brigadier.tree.RootCommandNode;
+import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.command.CommandExecuteEvent;
@@ -158,23 +160,79 @@ public final class OfflineAuthGate {
   }
 
   /**
-   * Hides every command a waiting player has no business running.
+   * Guarantees the authentication commands run, whatever any other plugin decided.
    *
-   * <p>Their own {@code requires} predicate already hides {@code /register}, {@code /login} and
-   * {@code /changepassword} as appropriate, but that only governs this fork's own commands. Any
-   * plugin that registers a command without a predicate the player fails — Geyser, ViaVersion and
-   * the like — would still be listed and tab-completable. Stripping the graph here is the one place
-   * that covers all of them.</p>
+   * <p>{@link CommandExecuteEvent} is last-writer-wins, so a plugin subscribing later than the
+   * gate could deny {@code /login} and lock every offline player out of the server with no way to
+   * recover. These two commands are the only way past the gate, so they are re-allowed here at
+   * {@link PostOrder#LAST}.</p>
+   *
+   * <p>They deliberately carry no permission node either, so a permissions plugin cannot revoke
+   * them: their {@code requires} predicates never consult {@code getPermissionValue}.</p>
    */
-  @Subscribe
-  public void onAvailableCommands(final PlayerAvailableCommandsEvent event) {
-    if (!isGated(event.getPlayer())) {
+  @Subscribe(order = PostOrder.LAST)
+  public void keepAuthCommandsRunnable(final CommandExecuteEvent event) {
+    if (!(event.getCommandSource() instanceof Player player) || !isGated(player)) {
       return;
     }
 
-    final var root = event.getRootNode();
+    final String command = event.getCommand();
+    final int space = command.indexOf(' ');
+    final String label = (space == -1 ? command : command.substring(0, space))
+        .toLowerCase(Locale.ROOT);
+
+    if (ALLOWED_COMMANDS.contains(label) && !event.getResult().isAllowed()) {
+      logger.warn("A plugin tried to block /{} for {}, who has not authenticated yet. Allowing it "
+          + "anyway; blocking it would leave them no way in.", label, player.getUsername());
+      event.setResult(CommandExecuteEvent.CommandResult.allowed());
+    }
+  }
+
+  /**
+   * Cuts the command list down to the single command the player actually needs.
+   *
+   * <p>This is the authority on what a waiting player sees, not the {@code requires} predicates on
+   * {@code /register} and {@code /login}. Those run inside {@code CommandGraphInjector} before this
+   * event fires, so on a fresh connection they are evaluated while the registration lookup is still
+   * in flight and both commands survive — which is why a player who had already registered saw both
+   * offered after rejoining.</p>
+   *
+   * <p>Returning an {@link EventTask} holds the packet until the lookup lands;
+   * {@code BackendPlaySessionHandler} writes it off the event's future. Stripping here is also the
+   * only thing that hides <em>other</em> plugins' commands — Geyser, ViaVersion and the like are
+   * filtered by their own predicates, which a waiting player usually passes.</p>
+   */
+  @Subscribe
+  public EventTask onAvailableCommands(final PlayerAvailableCommandsEvent event) {
+    final Player player = event.getPlayer();
+    if (!isGated(player)) {
+      return null;
+    }
+
+    return EventTask.resumeWhenComplete(
+        manager.lookup(player.getUniqueId()).thenAccept(lookup -> {
+          if (!lookup.isFailed()) {
+            manager.setKnownRegistered(player.getUniqueId(), lookup.isFound());
+          }
+          retainOnly(event.getRootNode(), allowedCommandFor(player));
+        }));
+  }
+
+  /**
+   * The commands a waiting player may see: whichever of register or login applies, and both only
+   * while the lookup has not answered yet.
+   */
+  private Set<String> allowedCommandFor(final Player player) {
+    final Boolean registered = manager.isKnownRegistered(player.getUniqueId());
+    if (registered == null) {
+      return ALLOWED_COMMANDS;
+    }
+    return registered ? Set.of("login") : Set.of("register");
+  }
+
+  private static void retainOnly(final RootCommandNode<?> root, final Set<String> keep) {
     for (final CommandNode<?> child : new ArrayList<>(root.getChildren())) {
-      if (!ALLOWED_COMMANDS.contains(child.getName().toLowerCase(Locale.ROOT))) {
+      if (!keep.contains(child.getName().toLowerCase(Locale.ROOT))) {
         root.removeChildByName(child.getName());
       }
     }
