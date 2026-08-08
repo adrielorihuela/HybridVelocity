@@ -1082,7 +1082,7 @@ public class VelocityConfiguration implements ProxyConfig {
   public record OfflineAuthConfig(boolean enabled, int limboPort, String databaseFile) {
 
     public static final OfflineAuthConfig DEFAULT =
-        new OfflineAuthConfig(false, 0, "player_auth.db");
+        new OfflineAuthConfig(false, 30065, "auth/player-passwords.db");
 
     /**
      * Returns an OfflineAuthConfig from a config section, or the default if the section is null.

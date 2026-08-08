@@ -40,8 +40,15 @@ class OfflineAuthConfigTest {
   }
 
   @Test
-  void limboPortDefaultsToAutomaticSelection() {
-    assertEquals(0, OfflineAuthConfig.DEFAULT.limboPort());
+  void limboPortDefaultsToFixedPort() {
+    assertEquals(30065, OfflineAuthConfig.DEFAULT.limboPort());
+  }
+
+  @Test
+  void databaseLivesInTheAuthDirectory() {
+    // Keeping it beside hybridvelocity.toml made it easy to delete by accident, which would wipe
+    // every registration.
+    assertEquals("auth/player-passwords.db", OfflineAuthConfig.DEFAULT.databaseFile());
   }
 
   @Test

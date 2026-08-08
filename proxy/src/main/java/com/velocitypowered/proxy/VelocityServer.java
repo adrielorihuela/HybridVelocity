@@ -418,7 +418,7 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
     }
 
     final EmbeddedLimboServer embedded =
-        new EmbeddedLimboServer(Path.of("limbo"), configuration);
+        new EmbeddedLimboServer(Path.of("auth"), configuration);
     try {
       embedded.start(config.limboPort());
     } catch (Exception e) {

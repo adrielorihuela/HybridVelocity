@@ -1,5 +1,5 @@
 # Config version. Do not change this
-config-version = "2.9"
+config-version = "3.0"
 
 # What port should the proxy be bound to? By default, we'll bind to all addresses on port 25565.
 bind = "0.0.0.0:25565"
@@ -93,12 +93,19 @@ decompressed-bytes-per-second = 5242880
 # Premium players are unaffected. Disabled by default.
 enabled = false
 
-# Port the embedded limbo listens on, bound to 127.0.0.1 only.
-# 0 picks a free port automatically, which is what you want unless something else needs to know it.
-limbo-port = 0
+# Port the embedded limbo listens on. It is bound to 127.0.0.1 only, so it is not reachable
+# from outside this machine. Set 0 to let the system pick a free port automatically.
+limbo-port = 30065
 
-# SQLite file storing the password records, relative to the proxy directory.
-database-file = "player_auth.db"
+# Where the registered passwords are stored, relative to the proxy directory.
+#
+# DO NOT DELETE, MOVE OR EDIT THIS FILE. It is an SQLite database holding every player's
+# password, and it is the only copy. Deleting it erases every registration: each player would be
+# asked to register again, and until they did, anyone could claim their name by registering it
+# first. Back it up along with the rest of your server data.
+#
+# The passwords themselves are stored as bcrypt hashes and cannot be read back out of the file.
+database-file = "auth/player-passwords.db"
 
 [servers]
 # Configure your servers here. Each key represents the server's name, and the value
@@ -117,7 +124,9 @@ try = [
 # Every name must also exist in [servers] above. These commands are allowed for all
 # players by default, and can be restricted per server with the permission
 # velocity.command.server.<server name in lowercase>.
-comandos = []
+comandos = [
+    "lobby"
+]
 
 [forced-hosts]
 # Configure your forced hosts here.

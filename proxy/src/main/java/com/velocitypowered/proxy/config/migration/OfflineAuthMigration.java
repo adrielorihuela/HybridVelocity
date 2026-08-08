@@ -33,14 +33,22 @@ public final class OfflineAuthMigration implements ConfigurationMigration {
 
   @Override
   public boolean shouldMigrate(CommentedFileConfig config) {
-    return configVersion(config) < 2.9;
+    return configVersion(config) < 3.0;
   }
 
   @Override
   public void migrate(CommentedFileConfig config, Logger logger) {
-    config.set("offline-auth.enabled", DEFAULT.enabled());
-    config.set("offline-auth.limbo-port", DEFAULT.limboPort());
-    config.set("offline-auth.database-file", DEFAULT.databaseFile());
+    // Only seed keys that are absent: an operator who already enabled this, moved the database or
+    // pinned a port must not have those choices reset by an upgrade.
+    if (!config.contains("offline-auth.enabled")) {
+      config.set("offline-auth.enabled", DEFAULT.enabled());
+    }
+    if (!config.contains("offline-auth.limbo-port")) {
+      config.set("offline-auth.limbo-port", DEFAULT.limboPort());
+    }
+    if (!config.contains("offline-auth.database-file")) {
+      config.set("offline-auth.database-file", DEFAULT.databaseFile());
+    }
 
     config.setComment("offline-auth.enabled", """
         Hold players that Mojang could not authenticate on the proxy until they register or log in.
@@ -48,12 +56,19 @@ public final class OfflineAuthMigration implements ConfigurationMigration {
         Premium players are unaffected. Disabled by default.""");
 
     config.setComment("offline-auth.limbo-port", """
-        Port the embedded limbo listens on, bound to 127.0.0.1 only.
-        0 picks a free port automatically, which is what you want unless something else needs to know it.""");
+        Port the embedded limbo listens on. It is bound to 127.0.0.1 only, so it is not reachable
+        from outside this machine. Set 0 to let the system pick a free port automatically.""");
 
     config.setComment("offline-auth.database-file", """
-        SQLite file storing the password records, relative to the proxy directory.""");
+        Where the registered passwords are stored, relative to the proxy directory.
 
-    config.set("config-version", "2.9");
+        DO NOT DELETE, MOVE OR EDIT THIS FILE. It is an SQLite database holding every player's
+        password, and it is the only copy. Deleting it erases every registration: each player would be
+        asked to register again, and until they did, anyone could claim their name by registering it
+        first. Back it up along with the rest of your server data.
+
+        The passwords themselves are stored as bcrypt hashes and cannot be read back out of the file.""");
+
+    config.set("config-version", "3.0");
   }
 }
