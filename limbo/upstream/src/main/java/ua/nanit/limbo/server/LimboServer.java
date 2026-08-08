@@ -46,8 +46,18 @@ public final class LimboServer {
 
     private CommandManager commandManager;
 
+    // HybridVelocity patch: when embedded inside the proxy there is no standalone process to own,
+    // so the interactive command manager (which reads System.in and would fight the proxy console),
+    // the JVM shutdown hook and the explicit System.gc() are all skipped. Lifecycle is driven by
+    // VelocityServer instead. See docs/limbo.md.
+    private boolean embedded;
+
     public void start() throws Exception {
-        config = new LimboConfig(Paths.get("./"));
+        start(Paths.get("./"));
+    }
+
+    public void start(java.nio.file.Path workingDirectory) throws Exception {
+        config = new LimboConfig(workingDirectory);
         config.load();
 
         Log.setLevel(config.getDebugLevel());
@@ -68,15 +78,25 @@ public final class LimboServer {
 
         keepAliveTask = workerGroup.scheduleAtFixedRate(this::broadcastKeepAlive, 0L, 5L, TimeUnit.SECONDS);
 
-        Runtime.getRuntime().addShutdownHook(new Thread(this::stop, "NanoLimbo shutdown thread"));
+        if (!embedded) {
+            Runtime.getRuntime().addShutdownHook(new Thread(this::stop, "NanoLimbo shutdown thread"));
+        }
 
         Log.info("Server started on %s", config.getAddress());
 
-        commandManager = new CommandManager();
-        commandManager.registerAll(this);
-        commandManager.start();
+        if (!embedded) {
+            commandManager = new CommandManager();
+            commandManager.registerAll(this);
+            commandManager.start();
 
-        System.gc();
+            System.gc();
+        }
+    }
+
+    /** HybridVelocity patch: run without the standalone console, shutdown hook and System.gc(). */
+    public void startEmbedded(java.nio.file.Path workingDirectory) throws Exception {
+        this.embedded = true;
+        start(workingDirectory);
     }
 
     private void startBootstrap() {
@@ -107,7 +127,8 @@ public final class LimboServer {
         connections.getAllConnections().forEach(ClientConnection::sendKeepAlive);
     }
 
-    private void stop() {
+    // HybridVelocity patch: was private; the proxy drives shutdown explicitly.
+    public void stop() {
         Log.info("Stopping server...");
 
         if (keepAliveTask != null) {
