@@ -31,6 +31,7 @@ import com.velocitypowered.proxy.config.migration.ForwardingMigration;
 import com.velocitypowered.proxy.config.migration.KeyAuthenticationMigration;
 import com.velocitypowered.proxy.config.migration.MiniMessageTranslationsMigration;
 import com.velocitypowered.proxy.config.migration.MotdMigration;
+import com.velocitypowered.proxy.config.migration.OfflineAuthMigration;
 import com.velocitypowered.proxy.config.migration.PacketLimiterMigration;
 import com.velocitypowered.proxy.config.migration.TransferIntegrationMigration;
 import com.velocitypowered.proxy.util.AddressUtil;
@@ -97,6 +98,8 @@ public class VelocityConfiguration implements ProxyConfig {
   private boolean forceKeyAuthentication = true; // Added in 1.19
   @Expose
   private PacketLimiterConfig packetLimiterConfig = PacketLimiterConfig.DEFAULT;
+  @Expose
+  private OfflineAuthConfig offlineAuthConfig = OfflineAuthConfig.DEFAULT;
 
   private VelocityConfiguration(Servers servers, ForcedHosts forcedHosts, Advanced advanced,
       Query query, Metrics metrics) {
@@ -113,7 +116,8 @@ public class VelocityConfiguration implements ProxyConfig {
       boolean onlineModeKickExistingPlayers, PingPassthroughMode pingPassthrough,
       boolean samplePlayersInPing, boolean enablePlayerAddressLogging, Servers servers,
       ForcedHosts forcedHosts, Advanced advanced, Query query, Metrics metrics,
-      boolean forceKeyAuthentication, PacketLimiterConfig packetLimiterConfig) {
+      boolean forceKeyAuthentication, PacketLimiterConfig packetLimiterConfig,
+      OfflineAuthConfig offlineAuthConfig) {
     this.bind = bind;
     this.motd = motd;
     this.showMaxPlayers = showMaxPlayers;
@@ -133,6 +137,7 @@ public class VelocityConfiguration implements ProxyConfig {
     this.metrics = metrics;
     this.forceKeyAuthentication = forceKeyAuthentication;
     this.packetLimiterConfig = packetLimiterConfig;
+    this.offlineAuthConfig = offlineAuthConfig;
   }
 
   /**
@@ -196,6 +201,23 @@ public class VelocityConfiguration implements ProxyConfig {
     for (String s : servers.getServerCommands()) {
       if (!servers.getServers().containsKey(s)) {
         logger.error("Server command '{}' is not registered in your configuration!", s);
+        valid = false;
+      }
+    }
+
+    if (offlineAuthConfig.enabled()) {
+      if (offlineAuthConfig.limboPort() < 0 || offlineAuthConfig.limboPort() > 65535) {
+        logger.error("[offline-auth] limbo-port {} is not a valid port.",
+            offlineAuthConfig.limboPort());
+        valid = false;
+      }
+      if (offlineAuthConfig.databaseFile().isBlank()) {
+        logger.error("[offline-auth] database-file must not be empty.");
+        valid = false;
+      }
+      if (servers.getAttemptConnectionOrder().isEmpty()) {
+        logger.error("[offline-auth] is enabled but 'try' is empty, so there would be nowhere to "
+            + "send players after they authenticate.");
         valid = false;
       }
     }
@@ -337,6 +359,15 @@ public class VelocityConfiguration implements ProxyConfig {
    */
   public List<String> getServerCommands() {
     return servers.getServerCommands();
+  }
+
+  /**
+   * Returns the offline authentication settings from the {@code [offline-auth]} section.
+   *
+   * @return the offline authentication configuration
+   */
+  public OfflineAuthConfig getOfflineAuthConfig() {
+    return offlineAuthConfig;
   }
 
   @Override
@@ -490,6 +521,7 @@ public class VelocityConfiguration implements ProxyConfig {
         .add("enablePlayerAddressLogging", enablePlayerAddressLogging)
         .add("forceKeyAuthentication", forceKeyAuthentication)
         .add("packetLimiterConfig", packetLimiterConfig)
+        .add("offlineAuthConfig", offlineAuthConfig)
         .toString();
   }
 
@@ -530,7 +562,8 @@ public class VelocityConfiguration implements ProxyConfig {
           new MotdMigration(),
           new MiniMessageTranslationsMigration(),
           new TransferIntegrationMigration(),
-          new PacketLimiterMigration()
+          new PacketLimiterMigration(),
+          new OfflineAuthMigration()
       };
 
       for (final ConfigurationMigration migration : migrations) {
@@ -570,6 +603,8 @@ public class VelocityConfiguration implements ProxyConfig {
       final CommentedConfig advancedConfig = config.get("advanced");
       final CommentedConfig queryConfig = config.get("query");
       final CommentedConfig metricsConfig = config.get("metrics");
+      final OfflineAuthConfig offlineAuthConfig =
+              OfflineAuthConfig.fromConfig(config.get("offline-auth"));
       final PlayerInfoForwarding forwardingMode = config.getEnumOrElse(
               "player-info-forwarding-mode", PlayerInfoForwarding.NONE);
       final PingPassthroughMode pingPassthroughMode = config.getEnumOrElse("ping-passthrough",
@@ -616,7 +651,8 @@ public class VelocityConfiguration implements ProxyConfig {
               new Query(queryConfig),
               new Metrics(metricsConfig),
               forceKeyAuthentication,
-              packetLimiterConfig
+              packetLimiterConfig,
+              offlineAuthConfig
       );
     }
   }
@@ -1032,6 +1068,38 @@ public class VelocityConfiguration implements ProxyConfig {
 
     public boolean isEnabled() {
       return enabled;
+    }
+  }
+
+  /**
+   * Settings for the offline authentication gate and the embedded limbo that holds players while
+   * they authenticate. See {@code docs/offline-auth-plan.md}.
+   *
+   * @param enabled whether unauthenticated offline players are held for a register/login gate
+   * @param limboPort the loopback port for the embedded limbo, or {@code 0} to pick a free one
+   * @param databaseFile the SQLite file storing password records, relative to the proxy directory
+   */
+  public record OfflineAuthConfig(boolean enabled, int limboPort, String databaseFile) {
+
+    public static final OfflineAuthConfig DEFAULT =
+        new OfflineAuthConfig(false, 0, "player_auth.db");
+
+    /**
+     * Returns an OfflineAuthConfig from a config section, or the default if the section is null.
+     *
+     * @param config the configuration object to parse
+     * @return the offline auth config, or the default if {@code config} is null
+     */
+    public static OfflineAuthConfig fromConfig(CommentedConfig config) {
+      if (config != null) {
+        return new OfflineAuthConfig(
+            config.getOrElse("enabled", DEFAULT.enabled()),
+            config.getIntOrElse("limbo-port", DEFAULT.limboPort()),
+            config.getOrElse("database-file", DEFAULT.databaseFile())
+        );
+      } else {
+        return DEFAULT;
+      }
     }
   }
 

@@ -165,6 +165,7 @@ fill {
 dependencies {
     implementation(project(":velocity-api"))
     implementation(project(":velocity-native"))
+    implementation(project(":limbo"))
 
     implementation(libs.bundles.log4j)
     implementation(libs.kyori.ansi)

@@ -54,6 +54,7 @@ import com.velocitypowered.proxy.connection.util.ServerListPingHandler;
 import com.velocitypowered.proxy.console.VelocityConsole;
 import com.velocitypowered.proxy.crypto.EncryptionUtils;
 import com.velocitypowered.proxy.event.VelocityEventManager;
+import com.velocitypowered.proxy.limbo.EmbeddedLimboServer;
 import com.velocitypowered.proxy.network.ConnectionManager;
 import com.velocitypowered.proxy.plugin.VelocityPluginManager;
 import com.velocitypowered.proxy.plugin.loader.VelocityPluginContainer;
@@ -155,6 +156,11 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
       .create();
   private static final int PRE_SHUTDOWN_TIMEOUT =
             Integer.getInteger("velocity.pre-shutdown-timeout", 10);
+  /**
+   * Name of the internal limbo server. It is never registered in the {@link ServerMap}, so it
+   * cannot collide with an operator-configured server.
+   */
+  private static final String LIMBO_SERVER_NAME = "hybridvelocity:limbo";
 
   private final ConnectionManager cm;
   private final ProxyOptions options;
@@ -179,6 +185,8 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
   private final VelocityChannelRegistrar channelRegistrar = new VelocityChannelRegistrar();
   private final ServerListPingHandler serverListPingHandler;
   private final Set<String> registeredServerCommands = new LinkedHashSet<>();
+  private @Nullable EmbeddedLimboServer limbo;
+  private @Nullable RegisteredServer limboServer;
 
   VelocityServer(final ProxyOptions options) {
     pluginManager = new VelocityPluginManager(this);
@@ -310,6 +318,8 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
 
     registerServerCommands(configuration.getServerCommands());
 
+    startLimbo(configuration.getOfflineAuthConfig());
+
     ipAttemptLimiter = Ratelimiters.createWithMilliseconds(configuration.getLoginRatelimit());
     commandRateLimiter = Ratelimiters.createWithMilliseconds(configuration.getCommandRatelimit());
     tabCompleteRateLimiter = Ratelimiters.createWithMilliseconds(configuration.getTabCompleteRatelimit());
@@ -378,6 +388,56 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
       );
       registeredServerCommands.add(alias);
     }
+  }
+
+  /**
+   * Starts the embedded limbo that holds unauthenticated players, if offline authentication is
+   * enabled.
+   *
+   * <p>The limbo is deliberately <em>not</em> entered into the {@link ServerMap}: nothing filters
+   * {@code getAllServers()}, so registering it would expose it in {@code /server} tab completion,
+   * {@code /glist}, {@code /send} and the BungeeCord plugin channel, and make {@code /server
+   * <limbo>} a working shortcut for anyone. {@link #createRawRegisteredServer} yields a fully
+   * usable {@link RegisteredServer} without any of that.</p>
+   */
+  private void startLimbo(final VelocityConfiguration.OfflineAuthConfig config) {
+    if (!config.enabled()) {
+      return;
+    }
+
+    final EmbeddedLimboServer embedded =
+        new EmbeddedLimboServer(Path.of("limbo"), configuration);
+    try {
+      embedded.start(config.limboPort());
+    } catch (Exception e) {
+      logger.error("Could not start the embedded limbo. Offline authentication is disabled for "
+          + "this session; unauthenticated players will be refused.", e);
+      return;
+    }
+
+    this.limbo = embedded;
+    this.limboServer = createRawRegisteredServer(
+        new ServerInfo(LIMBO_SERVER_NAME, embedded.getAddress()));
+  }
+
+  /** Stops the embedded limbo if it is running. */
+  private void stopLimbo() {
+    final EmbeddedLimboServer embedded = this.limbo;
+    this.limbo = null;
+    this.limboServer = null;
+    if (embedded != null) {
+      embedded.stop();
+    }
+  }
+
+  /**
+   * Returns the limbo players wait on while they authenticate.
+   *
+   * @return the limbo server, or {@code null} if offline authentication is off or it failed to
+   *     start
+   */
+  public @Nullable RegisteredServer getLimboServer() {
+    return limboServer;
   }
 
   private void registerTranslations() {
@@ -576,6 +636,11 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
 
     registerServerCommands(newConfiguration.getServerCommands());
 
+    if (!newConfiguration.getOfflineAuthConfig().equals(configuration.getOfflineAuthConfig())) {
+      stopLimbo();
+      startLimbo(newConfiguration.getOfflineAuthConfig());
+    }
+
     // If we have a new bind address, bind to it
     if (!configuration.getBind().equals(newConfiguration.getBind())) {
       this.cm.bind(newConfiguration.getBind());
@@ -664,6 +729,8 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
         eventManager.fire(new ProxyShutdownEvent()).join();
 
         timedOut = !scheduler.shutdown() || timedOut;
+
+        stopLimbo();
 
         if (timedOut) {
           logger.error("Your plugins took over 10 seconds to shut down.");
