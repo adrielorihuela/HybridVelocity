@@ -29,6 +29,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Owns the offline authentication state: the password database, the bcrypt worker pool and which
@@ -150,6 +151,29 @@ public final class OfflineAuthManager {
     return hash(newPassword).thenCompose(hash -> database.updatePassword(uuid, hash));
   }
 
+  /**
+   * Records whether a player has an account, so the synchronous {@code requires} predicate on
+   * {@code /register} and {@code /login} can decide which of the two to show without touching the
+   * database.
+   *
+   * @param uuid the player's offline UUID
+   * @param registered whether they have a stored password
+   */
+  public void setKnownRegistered(final UUID uuid, final boolean registered) {
+    states.computeIfAbsent(uuid, ignored -> new AuthState()).registered = registered;
+  }
+
+  /**
+   * Whether the player is known to have an account.
+   *
+   * @param uuid the player's offline UUID
+   * @return {@code TRUE} or {@code FALSE} once looked up, {@code null} while still unknown
+   */
+  public @Nullable Boolean isKnownRegistered(final UUID uuid) {
+    final AuthState state = states.get(uuid);
+    return state == null ? null : state.registered;
+  }
+
   /** Marks a player as authenticated for the rest of their session. */
   public void markAuthenticated(final UUID uuid) {
     states.computeIfAbsent(uuid, ignored -> new AuthState()).authenticated = true;
@@ -187,6 +211,7 @@ public final class OfflineAuthManager {
    */
   private static final class AuthState {
     private volatile boolean authenticated;
+    private volatile @Nullable Boolean registered;
     private int failedAttempts;
   }
 }

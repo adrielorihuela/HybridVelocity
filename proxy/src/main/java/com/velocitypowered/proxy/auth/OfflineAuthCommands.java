@@ -54,7 +54,11 @@ public final class OfflineAuthCommands {
       final OfflineAuthManager manager, final OfflineAuthGate gate) {
     final LiteralCommandNode<CommandSource> node = BrigadierCommand
         .literalArgumentBuilder("register")
-        .requires(source -> source instanceof Player player && gate.isGated(player))
+        // Hidden once we know they have an account, so a registered player is never offered a way
+        // to overwrite it. Both are shown until the lookup lands, which is a fraction of a second.
+        .requires(source -> source instanceof Player player
+            && gate.isGated(player)
+            && !Boolean.TRUE.equals(manager.isKnownRegistered(player.getUniqueId())))
         .executes(ctx -> usage(ctx.getSource(), "Usage: /register <password> <password>"))
         .then(BrigadierCommand.requiredArgumentBuilder(PASSWORD, StringArgumentType.word())
             .executes(ctx -> usage(ctx.getSource(), "Usage: /register <password> <password>"))
@@ -81,7 +85,9 @@ public final class OfflineAuthCommands {
       final OfflineAuthManager manager, final OfflineAuthGate gate) {
     final LiteralCommandNode<CommandSource> node = BrigadierCommand
         .literalArgumentBuilder("login")
-        .requires(source -> source instanceof Player player && gate.isGated(player))
+        .requires(source -> source instanceof Player player
+            && gate.isGated(player)
+            && !Boolean.FALSE.equals(manager.isKnownRegistered(player.getUniqueId())))
         .executes(ctx -> usage(ctx.getSource(), "Usage: /login <password>"))
         .then(BrigadierCommand.requiredArgumentBuilder(PASSWORD, StringArgumentType.word())
             .executes(ctx -> {
@@ -145,6 +151,7 @@ public final class OfflineAuthCommands {
       }
       if (lookup.isFound()) {
         // Never overwrite an existing account from the register path.
+        manager.setKnownRegistered(player.getUniqueId(), true);
         player.sendMessage(error("You are already registered. Type /login <password> to log in."));
         return;
       }
@@ -152,6 +159,7 @@ public final class OfflineAuthCommands {
       manager.register(player.getUniqueId(), player.getUsername(), password)
           .thenAccept(stored -> {
             if (stored) {
+              manager.setKnownRegistered(player.getUniqueId(), true);
               gate.completeAuthentication(player);
             } else {
               player.sendMessage(error("Could not save your password. Please try again."));

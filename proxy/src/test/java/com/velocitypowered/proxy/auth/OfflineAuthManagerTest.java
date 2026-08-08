@@ -20,6 +20,7 @@ package com.velocitypowered.proxy.auth;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
@@ -102,6 +103,36 @@ class OfflineAuthManagerTest {
 
     manager.forget(uuid);
     assertFalse(manager.isAuthenticated(uuid), "a reconnect must authenticate again");
+  }
+
+  @Test
+  void registrationStateIsUnknownUntilLookedUp() {
+    // The requires predicate on /register and /login is synchronous and cannot query the database,
+    // so it relies on this cache. Unknown must be distinguishable from both answers, otherwise a
+    // player would briefly be shown the wrong command.
+    assertNull(manager.isKnownRegistered(UUID.randomUUID()));
+  }
+
+  @Test
+  void registrationStateIsRemembered() {
+    final UUID registered = UUID.randomUUID();
+    final UUID fresh = UUID.randomUUID();
+
+    manager.setKnownRegistered(registered, true);
+    manager.setKnownRegistered(fresh, false);
+
+    assertEquals(Boolean.TRUE, manager.isKnownRegistered(registered));
+    assertEquals(Boolean.FALSE, manager.isKnownRegistered(fresh));
+  }
+
+  @Test
+  void forgettingClearsTheRegistrationState() {
+    final UUID uuid = UUID.randomUUID();
+    manager.setKnownRegistered(uuid, true);
+
+    manager.forget(uuid);
+
+    assertNull(manager.isKnownRegistered(uuid));
   }
 
   @Test

@@ -17,18 +17,25 @@
 
 package com.velocitypowered.proxy.auth;
 
+import com.mojang.brigadier.tree.CommandNode;
 import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.command.CommandExecuteEvent;
+import com.velocitypowered.api.event.command.PlayerAvailableCommandsEvent;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.permission.PermissionsSetupEvent;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
+import com.velocitypowered.api.permission.PermissionFunction;
+import com.velocitypowered.api.permission.PermissionProvider;
+import com.velocitypowered.api.permission.Tristate;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import com.velocitypowered.proxy.VelocityServer;
 import com.velocitypowered.proxy.plugin.virtual.VelocityVirtualPlugin;
 import com.velocitypowered.proxy.server.InternalServers;
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -150,6 +157,54 @@ public final class OfflineAuthGate {
     promptFor(player);
   }
 
+  /**
+   * Hides every command a waiting player has no business running.
+   *
+   * <p>Their own {@code requires} predicate already hides {@code /register}, {@code /login} and
+   * {@code /changepassword} as appropriate, but that only governs this fork's own commands. Any
+   * plugin that registers a command without a predicate the player fails — Geyser, ViaVersion and
+   * the like — would still be listed and tab-completable. Stripping the graph here is the one place
+   * that covers all of them.</p>
+   */
+  @Subscribe
+  public void onAvailableCommands(final PlayerAvailableCommandsEvent event) {
+    if (!isGated(event.getPlayer())) {
+      return;
+    }
+
+    final var root = event.getRootNode();
+    for (final CommandNode<?> child : new ArrayList<>(root.getChildren())) {
+      if (!ALLOWED_COMMANDS.contains(child.getName().toLowerCase(Locale.ROOT))) {
+        root.removeChildByName(child.getName());
+      }
+    }
+  }
+
+  /**
+   * Denies every permission until the player authenticates.
+   *
+   * <p>A single function instance is installed, and it consults the gate on each call rather than
+   * being swapped later — {@link PermissionsSetupEvent} fires once per player and cannot be
+   * re-fired when authentication completes.</p>
+   */
+  @Subscribe
+  public void onPermissionsSetup(final PermissionsSetupEvent event) {
+    if (!(event.getSubject() instanceof Player player)) {
+      return;
+    }
+
+    final PermissionProvider original = event.getProvider();
+    event.setProvider(subject -> {
+      final PermissionFunction delegate = original.createFunction(subject);
+      if (delegate == null) {
+        return permission -> isGated(player) ? Tristate.FALSE : Tristate.UNDEFINED;
+      }
+      return permission -> isGated(player)
+          ? Tristate.FALSE
+          : delegate.getPermissionValue(permission);
+    });
+  }
+
   /** Drops the session state and any pending timeout when the player leaves. */
   @Subscribe
   public void onDisconnect(final DisconnectEvent event) {
@@ -207,6 +262,7 @@ public final class OfflineAuthGate {
             "Authentication is unavailable. Please try again later.", NamedTextColor.RED));
         return;
       }
+      manager.setKnownRegistered(player.getUniqueId(), lookup.isFound());
       player.sendMessage(Component.text(lookup.isFound()
           ? "Type /login <password> to log in."
           : "Type /register <password> <password> to register."));
