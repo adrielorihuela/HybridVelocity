@@ -8,25 +8,26 @@ This is **on by default**. Updating an existing installation turns it on.
 
 Premium players are unaffected: they connect exactly as they do on stock Velocity.
 
-This implements the specification in [update-plan.md](update-plan.md). For why it is built this way,
-see [offline-auth-plan.md](offline-auth-plan.md); for the authentication server itself, see
-[auth-server.md](auth-server.md).
+This implements the specification in [update-plan.md](../development/offline-auth-specification.md). For why it is built this way,
+see [offline-auth-plan.md](../development/offline-auth-plan.md); for the authentication server itself, see
+[auth-server.md](../development/auth-server.md).
 
 ## Configuring it
 
-Three options in `hybridvelocity.toml`, next to `online-mode`:
+Three options in `hybridvelocity.toml`:
 
 ```toml
-offline-auth = true
-auth-server-name = "Auth"
-auth-server-port = 30065
+[offline-auth]
+enabled = true
+server-name = "auth"
+server-port = 30065
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `offline-auth` | On by default. Set to `false` to let unauthenticated players straight through, as stock Velocity does. Premium players are unaffected either way. |
-| `auth-server-name` | The name the authentication server is registered under. Hidden from `/server`, `/glist`, `/send` and tab completion, but visible to plugins — ViaVersion needs to see it. Must not match a server in `[servers]`. |
-| `auth-server-port` | Loopback port. Bound to `127.0.0.1` only, so it is unreachable from outside the machine. `0` picks a free one on each start. |
+| `enabled` | On by default. Set to `false` to let unauthenticated players straight through, as stock Velocity does. Premium players are unaffected either way. |
+| `server-name` | The name the authentication server is registered under. Hidden from `/server`, `/glist`, `/send` and tab completion, but visible to plugins — ViaVersion needs to see it. Must not match a server in `[servers]`. |
+| `server-port` | Loopback port. Bound to `127.0.0.1` only, so it is unreachable from outside the machine. `0` picks a free one on each start. |
 
 The proxy refuses to start if `try` is empty while this is on — there would be nowhere to send
 players after they authenticate.
@@ -47,16 +48,15 @@ Everything for this feature lives there:
 | --- | --- |
 | `player-passwords.db` | The password records. **Never delete this.** |
 | `settings.yml` | The authentication server's appearance and limits. Yours to edit, with a comment on every option. The proxy writes it once and never touches it again. |
-| `generated/settings.yml` | Written on every start by merging the above with the bind address and forwarding from `hybridvelocity.toml`. Do not edit — it is overwritten. |
 
 The database path is fixed and not configurable: it is the only copy of every registration, and
 being able to move it only invites losing track of it. Deleting it asks every player to register
 again, and until they do, anyone can claim their name by registering it first. Back it up with the
 rest of your server data. The passwords inside are bcrypt hashes and cannot be read back out.
 
-The bind address and forwarding are kept out of the file you edit on purpose: binding anywhere but
-loopback would expose an unauthenticated world to the network, and a forwarding mode that disagrees
-with the proxy's breaks the handshake.
+The bind address and forwarding never appear in that file on purpose: binding anywhere but loopback
+would expose an unauthenticated world to the network, and a forwarding mode that disagrees with the
+proxy's breaks the handshake. The proxy passes both in directly.
 
 ## What a player sees
 

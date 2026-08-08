@@ -1,27 +1,27 @@
 # Offline authentication: post-mortem of the first attempt
 
-The register/login gate specified in [update-plan.md](update-plan.md) was implemented once and it
+The register/login gate specified in [update-plan.md](offline-auth-specification.md) was implemented once and it
 did not work: the client disconnected instead of waiting on the proxy. This document records what
 was built, what the client actually reported, and why each cause matters, so the next attempt does
 not repeat any of it.
 
-The attempt lives on the branch `codex-attempt-2`, commit `bce6544a`
-("Add offline authentication with password management", 18 files, +1695), with a follow-up commit
-`8a69ea7f` that only renamed two documents. **Nothing from it is on `main`.** File paths in this
-document refer to that branch unless stated otherwise; read them with
-`git show codex-attempt-2:<path>` in case the branch is ever deleted.
+The attempt was made on a branch that has since been deleted, so **none of it is retrievable and
+none of it is on `main`**. This document is the record. File paths below describe where the code
+lived on that branch, not files that exist today.
 
-That branch also carries its own two notes:
+It carried two notes of its own:
 
-- `docs/goal.md` — the specification, byte-identical to `main`'s `docs/update-plan.md`.
-- `docs/to-do.md` — a partial failure analysis with a proposed fix. It is **correct as far as it
-  goes but incomplete**; see [What the previous analysis missed](#what-the-previous-analysis-missed).
+- a copy of the specification, byte-identical to
+  [offline-auth-specification.md](offline-auth-specification.md);
+- a partial failure analysis with a proposed fix, **correct as far as it goes but incomplete** — see
+  [What the previous analysis missed](#what-the-previous-analysis-missed). Its findings are quoted
+  in full below, which is the only reason they survive.
 
 ## What was built
 
 The gate was inserted in `AuthSessionHandler`, keyed on the hybrid offline profile (the dotted
 username produced when Mojang returns HTTP 204 — see
-[hybrid-offline-profiles.md](hybrid-offline-profiles.md)):
+[hybrid-offline-profiles.md](../guide/hybrid-offline-profiles.md)):
 
 | Client version | What the attempt did |
 | --- | --- |
@@ -56,7 +56,7 @@ where it broke.**
 
 ## What the client reported
 
-Two distinct failures, both quoted verbatim from `docs/to-do.md` on that branch:
+Two distinct failures, both quoted verbatim from that branch's own notes:
 
 ```text
 Missing tag TagKey[minecraft:damage_type / minecraft:is_fire]
@@ -93,7 +93,7 @@ means different things in each. This is a permanent hazard for any code that cal
 
 ### 3. No `Login (play)` packet was ever sent — and no world
 
-**This is the cause `docs/to-do.md` does not mention, and it would have sunk the proposed fix too.**
+**This is the cause that analysis does not mention, and it would have sunk the proposed fix too.**
 
 Nothing on that branch writes `JoinGamePacket`, chunk data, or a player position. After the fake
 `finish_configuration` the client enters PLAY expecting `Login (play)` as the very first packet and
@@ -129,12 +129,12 @@ it.
 
 ## What the previous analysis missed
 
-`docs/to-do.md` on that branch correctly identifies cause 1 and cause 2, and proposes a real fix
+The branch's own analysis correctly identified cause 1 and cause 2, and proposed a real fix
 for them: capture a vanilla server's CONFIGURATION packet sequence per version, ship it as an
 opaque blob in the JAR, replay it, and only then finish configuration. That reasoning is sound as
 far as the configuration phase goes.
 
-But its plan stops at the end of CONFIGURATION. It never addresses causes **3, 4, 5 or 6**. A
+But that plan stops at the end of CONFIGURATION. It never addresses causes **3, 4, 5 or 6**. A
 client that completes configuration and enters PLAY with no `Login (play)` and no world is still a
 broken client. Implementing `to-do.md` as written would have replaced one disconnect with a hang on
 the loading screen.

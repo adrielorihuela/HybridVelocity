@@ -5,24 +5,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repository is
 
 HybridVelocity is a fork of [Velocity](https://github.com/PaperMC/Velocity), the Minecraft
-server proxy. Most of the tree is upstream code; `docs/` documents what the fork changes.
-Read `docs/README.md` before touching login, configuration or command code.
+server proxy. Most of the tree is upstream code. `docs/guide/` documents the fork for operators
+and `docs/development/` records why it is built the way it is — read `docs/development/README.md`
+before touching login, configuration or command code.
 
 Fork-specific behaviour:
 
 - **Hybrid offline profiles** (`connection/client/InitialLoginSessionHandler.java`) — when the
   Mojang session server returns 204, the player is accepted with a `.`-suffixed username and
   an offline UUID derived from it, instead of being disconnected. See
-  `docs/hybrid-offline-profiles.md`.
+  `docs/guide/hybrid-offline-profiles.md`.
 - **Offline authentication** (`proxy/.../auth/`, `offline-auth` in the config) — unauthenticated
   offline players are held on an authentication server until they `/register` or `/login`. On by
-  default. See `docs/offline-auth.md`.
+  default. See `docs/guide/offline-auth.md`.
 - **The authentication server** (`:limbo` module, `auth/AuthServer.java`) — a vendored copy of
   NanoLimbo run in-process. "Limbo" is only the upstream project's name; everything
-  operator-facing calls it the authentication server. See `docs/auth-server.md`.
+  operator-facing calls it the authentication server. See `docs/development/auth-server.md`.
 - **Per-server shortcut commands** (`command/builtin/ServerShortcutCommand.java`, registered
   from `VelocityServer#registerServerCommands`) — the `comandos` list in `[servers]`.
-  See `docs/server-commands.md`.
+  See `docs/guide/server-commands.md`.
 
 The configuration file is `hybridvelocity.toml`; `ConfigurationLocation` renames an
 upstream-named `velocity.toml` on first start. Permission nodes keep the `velocity.` prefix —
@@ -129,7 +130,7 @@ assume the native path is available. `limbo/` is vendored third-party source —
 (GPL-3.0, same licence as this fork). The module's build script sits *outside* the subtree and
 points `sourceSets` into it, so upstream stays byte-identical and `git subtree pull` does not
 conflict. Two upstream files carry local patches, both marked `HybridVelocity patch:` and listed
-in `docs/auth-server.md` — keep that list accurate and the patch surface small.
+in `docs/development/auth-server.md` — keep that list accurate and the patch surface small.
 
 **Checkstyle is disabled and Spotless excludes `upstream/**` for that module.** This is a
 licensing requirement, not a style preference: `velocity-spotless` applies
@@ -140,8 +141,9 @@ would rewrite NanoLimbo's GPL copyright notices to "Velocity Contributors".
 `proxy/src/main/resources/auth-server-settings.yml` and then never touches it again, so its comments
 survive Configurate, which strips them on save. The bind address and forwarding are deliberately
 absent from that file — the operator must not be able to move it off loopback or disagree with the
-proxy's forwarding mode — and are merged in at start-up into `auth/generated/settings.yml`, which is
-what actually runs.
+proxy's forwarding mode — and are passed to `LimboServer` in code. That is what the `override` patch
+in the vendored `LimboConfig` is for: its `load()` reads both from disk and throws outright when
+`infoForwarding` is missing, so the values have to be installed before loading, not assigned after.
 
 The password database is at a fixed `auth/player-passwords.db`. It needs its own TCP port: two
 listeners cannot share one (`SO_REUSEPORT` load-balances rather than multiplexes), and a socketless
@@ -165,7 +167,7 @@ hide it, which broke ViaVersion: Via pings every server in `getAllServers()` to 
 and a server it cannot see falls back to a pre-1.16 assumption and mis-decodes the login. It is
 hidden from command output through `server/InternalServers.java` instead — add any new
 player-facing server listing to that filter rather than un-registering things. Its name comes from
-`auth-server-name`, so `InternalServers` is told it at start-up rather than holding a constant.
+`[offline-auth] server-name`, so `InternalServers` is told it at start-up, not a constant.
 
 **`/register` and `/login` are load-bearing.** They are the only way past the gate, so they carry no
 permission node (nothing for a permissions plugin to revoke), are re-allowed at `PostOrder.LAST` if

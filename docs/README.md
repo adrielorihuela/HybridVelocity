@@ -1,29 +1,30 @@
 # HybridVelocity documentation
 
-Documentation for the changes this fork makes on top of upstream Velocity. Anything not
-covered here behaves exactly like [Velocity](https://docs.papermc.io/velocity).
+Everything this fork adds on top of upstream [Velocity](https://docs.papermc.io/velocity). Anything
+not covered here behaves exactly as it does upstream, so the Velocity documentation still applies.
 
-| Document | Contents |
+## [guide/](guide/) — using the proxy
+
+Start here if you want to run it.
+
+| Document | |
 | --- | --- |
-| [server-commands.md](server-commands.md) | The `comandos` option: per-server shortcut commands and their permissions. |
-| [hybrid-offline-profiles.md](hybrid-offline-profiles.md) | How offline players are accepted on an online-mode proxy. |
-| [offline-auth.md](offline-auth.md) | Offline player authentication: the register/login gate and how to configure it. |
-| [auth-server.md](auth-server.md) | The embedded authentication server, its vendored subtree and local patches. |
-| [update-plan.md](update-plan.md) | Functional specification the offline authentication implements. |
+| [getting-started.md](guide/getting-started.md) | Install, first run, upgrading from stock Velocity, and what is on by default. |
+| [offline-auth.md](guide/offline-auth.md) | The register/login gate: options, what a player sees, and what to back up. |
+| [server-commands.md](guide/server-commands.md) | The `comandos` option: a command per server, and its permissions. |
+| [hybrid-offline-profiles.md](guide/hybrid-offline-profiles.md) | How players Mojang cannot verify are given an identity. |
 
-## Offline authentication — background
+## [development/](development/) — how it was built
 
-How the feature came to be built this way. Start with [offline-auth.md](offline-auth.md) if you
-just want to use it.
+Why the fork works the way it does: the specification, the protocol research, the failed first
+attempt and what it taught us. Read this before changing the authentication code — most of it exists
+to stop a specific mistake being repeated.
 
-| Document | Contents |
+| Document | |
 | --- | --- |
-| [offline-auth-plan.md](offline-auth-plan.md) | The adopted plan: vendor NanoLimbo into the fork and run it in-process, and the options rejected. |
-| [offline-auth-postmortem.md](offline-auth-postmortem.md) | What was built on the `codex-attempt-2` branch, how the client failed, and why. |
-| [offline-auth-requirements.md](offline-auth-requirements.md) | What the vanilla client demands per version: configuration phase, registries and tags, the PLAY spawn sequence, KeepAlive and timeouts. |
-
-## Discarded
-
-[discarded/](discarded/) holds superseded analysis, kept for the reasoning it records rather than as
-plans to follow. Nothing in there should be implemented without checking it against the live plan
-above.
+| [offline-auth-specification.md](development/offline-auth-specification.md) | The original functional specification the feature implements. |
+| [offline-auth-postmortem.md](development/offline-auth-postmortem.md) | The first attempt, how the client failed, and the six causes. |
+| [offline-auth-requirements.md](development/offline-auth-requirements.md) | What the vanilla client demands per version: configuration phase, registries and tags, the PLAY spawn sequence, KeepAlive and timeouts. |
+| [offline-auth-plan.md](development/offline-auth-plan.md) | The architecture that was chosen, and the alternatives rejected. |
+| [auth-server.md](development/auth-server.md) | The vendored NanoLimbo subtree: layout, local patches and how to update it. |
+| [discarded/](development/discarded/) | Superseded analysis, kept for the reasoning it records. |

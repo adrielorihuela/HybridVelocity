@@ -1,7 +1,7 @@
 # Next update: offline authentication with an embedded limbo
 
 This is the adopted plan for delivering the register/login gate specified in
-[update-plan.md](update-plan.md). It supersedes
+[update-plan.md](offline-auth-specification.md). It supersedes
 [discarded/offline-auth-roadmap.md](discarded/offline-auth-roadmap.md).
 
 **Approach: vendor [NanoLimbo](https://github.com/Nan1t/NanoLimbo) into this repository as a Gradle
@@ -95,7 +95,7 @@ is where `registerServerCommands` lives). The embedded limbo goes in the same pl
    configured one), with an in-memory config: MODERN forwarding using the proxy's own
    `forwarding.secret`, so the loopback hop is authenticated with no user setup.
 2. Register it as a `ServerInfo` under a reserved name that is not offered by `/server`, the
-   `comandos` shortcuts (see [server-commands.md](server-commands.md)) or tab completion.
+   `comandos` shortcuts (see [server-commands.md](../guide/server-commands.md)) or tab completion.
 3. Shut it down in `VelocityServer#shutdown`, and restart it on `/velocity reload` if its settings
    changed — the same mirror-image treatment `reloadConfiguration()` gives every other
    configuration-derived subsystem.
@@ -121,14 +121,14 @@ On success, resolve the destination with `getNextServerToTry()` and connect with
 ### Authentication core
 
 Reuse `AuthDatabase`, `PasswordUtil`, `PasswordRecord` and `ChangePasswordHandler` from the
-`codex-attempt-2` branch, with the six defects listed in
+abandoned first attempt, with the six defects listed in
 [offline-auth-postmortem.md](offline-auth-postmortem.md#defects-unrelated-to-the-protocol) fixed
 first. The two that matter most: bcrypt must not run on the Netty event loop, and
 `getPasswordRecord` must distinguish "no row" from "query failed" so a broken database cannot offer
 `/register` for an account that already exists.
 
 The 60-second auth timeout, the 3-strike lockout, the password rules and the exact English chat
-strings all come from [update-plan.md](update-plan.md). Register `/changepassword` as a real
+strings all come from [update-plan.md](offline-auth-specification.md). Register `/changepassword` as a real
 Brigadier command through `VelocityCommandManager`.
 
 Note that the limbo sends its own KeepAlive, so the proxy's 30 s `read-timeout` is satisfied without
@@ -176,7 +176,7 @@ unable to leave the limbo, and landing on the correct server after `/login`.
 
 ## Related documents
 
-- [update-plan.md](update-plan.md) — the functional specification this implements.
+- [update-plan.md](offline-auth-specification.md) — the functional specification this implements.
 - [offline-auth-postmortem.md](offline-auth-postmortem.md) — why the first attempt failed.
 - [offline-auth-requirements.md](offline-auth-requirements.md) — what the client demands; still the
   reference for anyone tempted to hand-write protocol code.

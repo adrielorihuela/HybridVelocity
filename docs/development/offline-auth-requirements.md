@@ -85,14 +85,14 @@ Two independent timers must both be satisfied:
 - **The client** disconnects with "Timed out" if the server stops sending KeepAlive. A tick around
   every 10 seconds is the norm.
 - **The proxy** installs a Netty `ReadTimeoutHandler` in
-  [ServerChannelInitializer.java:65](../proxy/src/main/java/com/velocitypowered/proxy/network/ServerChannelInitializer.java)
+  [ServerChannelInitializer.java:65](../../proxy/src/main/java/com/velocitypowered/proxy/network/ServerChannelInitializer.java)
   using the `read-timeout` option, default **30000 ms**
-  ([VelocityConfiguration.java:792](../proxy/src/main/java/com/velocitypowered/proxy/config/VelocityConfiguration.java)).
+  ([VelocityConfiguration.java:792](../../proxy/src/main/java/com/velocitypowered/proxy/config/VelocityConfiguration.java)).
   If the client sends nothing for 30 s the proxy kills the connection. A client answering KeepAlive
   satisfies this; a client with no world otherwise would not.
 
 Any authentication timeout longer than `read-timeout` is only reachable if the KeepAlive tick is
-running. The specified 60-second timeout in [update-plan.md](update-plan.md) is twice
+running. The specified 60-second timeout in [update-plan.md](offline-auth-specification.md) is twice
 `read-timeout`.
 
 Note that KeepAlive IDs are per-state. A PLAY KeepAlive delivered to a client still in
@@ -101,7 +101,7 @@ CONFIGURATION is what produced `Received unknown packet id 121`.
 ## Packet inventory in this fork
 
 What already exists and is registered clientbound, with its registration line in
-[StateRegistry.java](../proxy/src/main/java/com/velocitypowered/proxy/protocol/StateRegistry.java):
+[StateRegistry.java](../../proxy/src/main/java/com/velocitypowered/proxy/protocol/StateRegistry.java):
 
 | Packet | State | Line |
 | --- | --- | --- |

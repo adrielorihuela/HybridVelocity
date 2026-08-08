@@ -1,64 +1,68 @@
 # HybridVelocity
 
-A fork of [Velocity](https://github.com/PaperMC/Velocity), the Minecraft server proxy,
-that lets a single online-mode proxy serve both premium and offline players, and adds
-quality-of-life features for server networks.
+A fork of [Velocity](https://github.com/PaperMC/Velocity) that lets one online-mode proxy serve
+premium and non-premium players together, with password authentication built in — no extra plugin,
+no extra server.
 
-HybridVelocity is licensed under the GPLv3 license, like Velocity.
+Licensed under the GPLv3, like Velocity.
 
-## What this fork adds
+## What it does
 
-### Hybrid offline profiles on online-mode proxies
+**Non-premium players are welcome, and must prove who they are.** Upstream Velocity kicks anyone
+Mojang cannot verify. HybridVelocity gives them an offline identity instead and holds them on a
+small authentication server running inside the proxy until they `/register` or `/login`. Only then
+do they reach a real server. Premium players are untouched — they connect exactly as before, with no
+prompt.
 
-Upstream Velocity kicks any player that Mojang cannot authenticate when the proxy runs in
-online mode. HybridVelocity accepts them instead as *hybrid offline profiles*:
+**Passwords are handled properly.** bcrypt with a per-record salt, in an embedded SQLite database.
+Nothing to install and nothing to configure. Everything fails closed: if the database or the
+authentication server is unavailable, players are refused rather than let through.
 
-* When the session server reports that no paid account owns the username, the player is
-  given an offline UUID derived from their name with a `.` appended (`Steve123` becomes
-  `Steve123.`). Usernames at the 16-character protocol limit are truncated to make room
-  for the marker.
-* The dotted name and its offline UUID are the player's identity on the proxy, so an
-  offline player can never collide with the premium account of the same name.
-* No player public key is retained for these profiles, because the key belongs to the
-  Mojang account UUID and would break signed chat and commands.
-* Premium players keep the stock Velocity flow, unchanged.
+**Identities cannot collide.** A non-premium `Steve123` becomes `Steve123.` with a UUID derived from
+that name, so they can never be mistaken for the premium account of the same name.
 
-See `proxy/src/main/java/com/velocitypowered/proxy/connection/client/InitialLoginSessionHandler.java`.
+**A command per server.** List a server under `comandos` and players get `/lobby` instead of
+`/server lobby`, permission-controlled per server.
 
-### Per-server shortcut commands
+Everything else is Velocity: same plugins, same API, same performance. Works with ViaVersion,
+Geyser and Floodgate.
 
-Servers listed in the `comandos` option of `hybridvelocity.toml` get their own command named
-after the server, so players can run `/Lobby` instead of `/server Lobby`. The commands are
-available to everyone by default and can be restricted per server with permissions.
-See [docs/server-commands.md](docs/server-commands.md).
+## Quick start
 
-### Offline player authentication
+Download `HybridVelocity-<version>-all.jar` from the
+[releases](https://github.com/adrielorihuela/HybridVelocity/releases) and run it:
 
-Players Mojang cannot authenticate are asked to register a password and log in before they
-reach any of your servers. They wait on an authentication server that runs **inside the proxy**
-— no extra server to install or configure — and passwords are stored as bcrypt hashes in an
-embedded SQLite database. On by default.
-See [docs/offline-auth.md](docs/offline-auth.md).
+```bash
+java -Xms512M -Xmx512M -jar HybridVelocity-1.1.0-all.jar
+```
 
-## Building
+Upgrading from stock Velocity? Just swap the jar — your `velocity.toml` is renamed and migrated,
+contents intact.
 
-HybridVelocity is built with [Gradle](https://gradle.org). Use the wrapper script
-(`./gradlew`, or `./gradlew.bat` on Windows); running `./gradlew build` performs the full
-build cycle, including Checkstyle, Spotless and the tests.
-
-## Running
-
-Once built, copy and run the `-all` JAR from `proxy/build/libs`. The proxy generates a
-default `hybridvelocity.toml` on first startup and you can configure it from there.
+Then read [docs/guide/getting-started.md](docs/guide/getting-started.md).
 
 ## Documentation
 
-Fork-specific documentation lives in [docs/](docs/README.md). For everything inherited
-from upstream, the [Velocity documentation](https://docs.papermc.io/velocity) still
-applies.
+- **[docs/guide/](docs/guide/README.md)** — running the proxy: installation, the authentication
+  gate and its options, the per-server commands.
+- **[docs/development/](docs/development/README.md)** — how it was built: the specification, the
+  protocol research, the attempt that failed and the architecture that replaced it.
+
+Anything not covered there behaves as upstream, so the
+[Velocity documentation](https://docs.papermc.io/velocity) still applies.
+
+## Building
+
+```bash
+./gradlew build
+```
+
+Uses the Gradle wrapper (`./gradlew.bat` on Windows) and runs Checkstyle, Spotless and the tests.
+The runnable jar is `proxy/build/libs/HybridVelocity-<version>-all.jar`.
 
 ## Upstream
 
-This project is a derivative of Velocity by the PaperMC team. Bugs that also reproduce on
-upstream Velocity should be reported to
+A derivative of Velocity by the PaperMC team, and it bundles
+[NanoLimbo](https://github.com/Nan1t/NanoLimbo) (also GPL-3.0) as the authentication server. Bugs
+that also reproduce on upstream Velocity belong at
 [PaperMC/Velocity](https://github.com/PaperMC/Velocity), not here.

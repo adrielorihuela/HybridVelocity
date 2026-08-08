@@ -46,5 +46,5 @@ queried. Offline-mode proxies keep the upstream behaviour.
 
 This makes an online-mode proxy reachable by unauthenticated clients, who can pick any
 username that is not a premium account. The planned register/login system described in
-[update-plan.md](update-plan.md) is what will tie an offline name to a password; until it
+[update-plan.md](../development/offline-auth-specification.md) is what will tie an offline name to a password; until it
 ships, offline names are not protected against being reused by someone else.

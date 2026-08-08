@@ -15,7 +15,7 @@
 > "[What both routes must do](#what-both-routes-must-do)" below, which is still accurate and is
 > referenced by the live plan.
 
-How to deliver the register/login gate specified in [update-plan.md](../update-plan.md),
+How to deliver the register/login gate specified in [update-plan.md](../offline-auth-specification.md),
 given the failure documented in [offline-auth-postmortem.md](../offline-auth-postmortem.md) and the
 client requirements catalogued in [offline-auth-requirements.md](../offline-auth-requirements.md).
 
@@ -45,8 +45,7 @@ plugin that depends on it, and that was a design defect independent of the proto
 ### Reuse the authentication core, with fixes
 
 `AuthDatabase`, `PasswordUtil`, `PasswordRecord` and `ChangePasswordHandler` from
-`codex-attempt-2` (`git show codex-attempt-2:proxy/src/main/java/com/velocitypowered/proxy/auth/...`)
-are a reasonable starting point. Six defects must be fixed first — they are itemised in the
+the abandoned first attempt are a reasonable starting point. Six defects must be fixed first — they are itemised in the
 post-mortem. The two that matter most:
 
 - **bcrypt runs on the Netty event loop.** Hashing must be dispatched off-loop via
@@ -58,14 +57,14 @@ post-mortem. The two that matter most:
 
 Also carry over: the 60-second timeout (which only works if a KeepAlive tick is running — see
 `read-timeout` in the requirements doc), the 3-strike lockout, the password rules, and the exact
-English chat strings from [update-plan.md](../update-plan.md). Register `/changepassword` as a real
+English chat strings from [update-plan.md](../offline-auth-specification.md). Register `/changepassword` as a real
 Brigadier command through `VelocityCommandManager` rather than matching a string prefix.
 
 ### Testing
 
 | Layer | How |
 | --- | --- |
-| Password rules, hashing, database | Plain JUnit — already covered on `codex-attempt-2` |
+| Password rules, hashing, database | Plain JUnit |
 | Packet sequence and state | `EmbeddedChannel` handler tests asserting the exact clientbound order and, critically, that **no PLAY packet is written before the client's `Finish Configuration` acknowledgement** |
 | Auth flow | Timeout fires at 60 s, lockout at 3 failures, non-auth commands blocked, backend connection attempted only after success |
 | Everything else | A real client, per version. There is no substitute; the first attempt had green tests and a broken protocol |
@@ -74,7 +73,7 @@ Brigadier command through `VelocityCommandManager` rather than matching a string
 
 ## Route A — limbo synthesized inside the proxy
 
-Satisfies [update-plan.md](../update-plan.md) §4.1 literally: no backend connection at all. This is
+Satisfies [update-plan.md](../offline-auth-specification.md) §4.1 literally: no backend connection at all. This is
 what [LimboAPI](https://github.com/Elytrium/LimboAPI) does.
 
 ### Scope
@@ -129,7 +128,7 @@ no packets it does not already write today.
 
 1. **Configuration** in `velocity.toml`: which registered server is the limbo, and whether the gate
    is enabled. Validate in `VelocityConfiguration#validate()` that the named server exists, the same
-   way `try` and `comandos` are validated (see [server-commands.md](../server-commands.md)).
+   way `try` and `comandos` are validated (see [server-commands.md](../../guide/server-commands.md)).
 
 2. **Routing**: at both gate points, send unauthenticated players to the limbo server instead of the
    normal initial server.
