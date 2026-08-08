@@ -17,6 +17,7 @@ adventure-text-serializer-json-legacy-impl = "net.kyori:adventure-text-serialize
 asm = "org.ow2.asm:asm:9.9.1"
 auto-service = "com.google.auto.service:auto-service:1.1.1"
 auto-service-annotations = "com.google.auto.service:auto-service-annotations:1.1.1"
+bcrypt = "at.favre.lib:bcrypt:0.10.2"
 brigadier = "com.velocitypowered:velocity-brigadier:1.0.0-SNAPSHOT"
 bstats = "org.bstats:bstats-base:3.1.0"
 caffeine = "com.github.ben-manes.caffeine:caffeine:3.2.3"
@@ -60,6 +61,7 @@ nightconfig = "com.electronwill.night-config:toml:3.8.3"
 slf4j = "org.slf4j:slf4j-api:2.0.17"
 snakeyaml = "org.yaml:snakeyaml:2.5"
 spotbugs-annotations = "com.github.spotbugs:spotbugs-annotations:4.9.8"
+sqlite-jdbc = "org.xerial:sqlite-jdbc:3.49.1.0"
 terminalconsoleappender = "net.minecrell:terminalconsoleappender:1.3.0"
 
 [bundles]
