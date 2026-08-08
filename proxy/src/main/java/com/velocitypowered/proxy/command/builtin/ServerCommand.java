@@ -30,6 +30,7 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
+import com.velocitypowered.proxy.server.InternalServers;
 import java.util.List;
 import java.util.Optional;
 import net.kyori.adventure.text.Component;
@@ -64,6 +65,9 @@ public final class ServerCommand {
                       : "";
               for (final RegisteredServer sv : server.getAllServers()) {
                 final String serverName = sv.getServerInfo().getName();
+                if (InternalServers.isInternal(serverName)) {
+                  continue;
+                }
                 if (serverName.regionMatches(true, 0, argument, 0, argument.length())) {
                   builder.suggest(serverName);
                 }

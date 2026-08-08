@@ -67,6 +67,7 @@ import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import com.velocitypowered.proxy.protocol.util.FaviconSerializer;
 import com.velocitypowered.proxy.protocol.util.GameProfileSerializer;
 import com.velocitypowered.proxy.scheduler.VelocityScheduler;
+import com.velocitypowered.proxy.server.InternalServers;
 import com.velocitypowered.proxy.server.ServerMap;
 import com.velocitypowered.proxy.util.AddressUtil;
 import com.velocitypowered.proxy.util.ClosestLocaleMatcher;
@@ -159,11 +160,8 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
       .create();
   private static final int PRE_SHUTDOWN_TIMEOUT =
             Integer.getInteger("velocity.pre-shutdown-timeout", 10);
-  /**
-   * Name of the internal limbo server. It is never registered in the {@link ServerMap}, so it
-   * cannot collide with an operator-configured server.
-   */
-  private static final String LIMBO_SERVER_NAME = "hybridvelocity:limbo";
+  /** Name of the internal limbo server that holds players while they authenticate. */
+  private static final String LIMBO_SERVER_NAME = InternalServers.AUTH;
 
   private final ConnectionManager cm;
   private final ProxyOptions options;
@@ -431,8 +429,15 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
 
     this.offlineAuth = manager;
     this.limbo = embedded;
-    this.limboServer = createRawRegisteredServer(
-        new ServerInfo(LIMBO_SERVER_NAME, embedded.getAddress()));
+
+    // Registered like any other backend rather than kept out of the ServerMap. ViaVersion learns a
+    // backend's protocol version by pinging the servers it finds in getAllServers(); a server it
+    // has never seen falls back to a pre-1.16 assumption and mis-decodes the login handshake. It is
+    // hidden from command output by InternalServers instead.
+    final ServerInfo limboInfo = new ServerInfo(LIMBO_SERVER_NAME, embedded.getAddress());
+    servers.getServer(LIMBO_SERVER_NAME)
+        .ifPresent(existing -> servers.unregister(existing.getServerInfo()));
+    this.limboServer = servers.register(limboInfo);
 
     final OfflineAuthGate gate = new OfflineAuthGate(this, manager);
     this.offlineAuthGate = gate;
@@ -455,9 +460,14 @@ public class VelocityServer implements ProxyServer, ForwardingAudience {
       commandManager.unregister("changepassword");
     }
 
+    final RegisteredServer registered = this.limboServer;
+    this.limboServer = null;
+    if (registered != null) {
+      servers.unregister(registered.getServerInfo());
+    }
+
     final EmbeddedLimboServer embedded = this.limbo;
     this.limbo = null;
-    this.limboServer = null;
     if (embedded != null) {
       embedded.stop();
     }

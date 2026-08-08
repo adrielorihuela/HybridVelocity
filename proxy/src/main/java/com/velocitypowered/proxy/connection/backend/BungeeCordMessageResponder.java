@@ -32,6 +32,7 @@ import com.velocitypowered.proxy.connection.client.ConnectedPlayer;
 import com.velocitypowered.proxy.protocol.packet.PluginMessagePacket;
 import com.velocitypowered.proxy.protocol.util.ByteBufDataInput;
 import com.velocitypowered.proxy.protocol.util.ByteBufDataOutput;
+import com.velocitypowered.proxy.server.InternalServers;
 import com.velocitypowered.proxy.server.VelocityRegisteredServer;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.netty.buffer.ByteBuf;
@@ -161,6 +162,9 @@ public class BungeeCordMessageResponder {
   private void processGetServers() {
     StringJoiner joiner = new StringJoiner(", ");
     for (RegisteredServer server : proxy.getAllServers()) {
+      if (InternalServers.isInternal(server)) {
+        continue;
+      }
       joiner.add(server.getServerInfo().getName());
     }
 
@@ -284,6 +288,9 @@ public class BungeeCordMessageResponder {
     if (target.equals("ALL") || target.equals("ONLINE")) {
       try {
         for (RegisteredServer rs : proxy.getAllServers()) {
+          if (InternalServers.isInternal(rs)) {
+            continue;
+          }
           if (!rs.getServerInfo().equals(currentUserServer)) {
             ((VelocityRegisteredServer) rs).sendPluginMessage(LEGACY_CHANNEL,
                 toForward.retainedSlice());

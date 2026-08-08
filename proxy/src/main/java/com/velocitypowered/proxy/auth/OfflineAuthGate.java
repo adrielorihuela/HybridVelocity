@@ -28,6 +28,7 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import com.velocitypowered.proxy.VelocityServer;
 import com.velocitypowered.proxy.plugin.virtual.VelocityVirtualPlugin;
+import com.velocitypowered.proxy.server.InternalServers;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -89,6 +90,14 @@ public final class OfflineAuthGate {
   public void onServerPreConnect(final ServerPreConnectEvent event) {
     final Player player = event.getPlayer();
     if (!isGated(player)) {
+      // The limbo is a normally registered server so that plugins which enumerate servers — most
+      // importantly ViaVersion, which pings each one to learn its protocol — behave. That means an
+      // authenticated player could ask to go there by name, which is nothing but a way to get
+      // stuck in an empty world.
+      final Optional<RegisteredServer> requested = event.getResult().getServer();
+      if (requested.isPresent() && InternalServers.isInternal(requested.get())) {
+        event.setResult(ServerPreConnectEvent.ServerResult.denied());
+      }
       return;
     }
 

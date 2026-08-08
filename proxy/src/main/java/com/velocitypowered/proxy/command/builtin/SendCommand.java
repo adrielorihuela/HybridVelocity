@@ -31,6 +31,7 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.proxy.plugin.virtual.VelocityVirtualPlugin;
+import com.velocitypowered.proxy.server.InternalServers;
 import java.util.Objects;
 import java.util.Optional;
 import net.kyori.adventure.text.Component;
@@ -88,6 +89,9 @@ public class SendCommand {
               : "";
           for (final RegisteredServer server : server.getAllServers()) {
             final String serverName = server.getServerInfo().getName();
+            if (InternalServers.isInternal(serverName)) {
+              continue;
+            }
             if (serverName.regionMatches(true, 0, argument, 0, argument.length())) {
               builder.suggest(server.getServerInfo().getName());
             }

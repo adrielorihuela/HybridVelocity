@@ -34,6 +34,7 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.util.ProxyVersion;
 import com.velocitypowered.proxy.VelocityServer;
+import com.velocitypowered.proxy.server.InternalServers;
 import com.velocitypowered.proxy.util.InformationUtils;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -277,7 +278,8 @@ public final class VelocityCommand {
     public int run(final CommandContext<CommandSource> context) {
       final CommandSource source = context.getSource();
 
-      final Collection<RegisteredServer> allServers = Set.copyOf(server.getAllServers());
+      final Collection<RegisteredServer> allServers =
+          Set.copyOf(InternalServers.filter(server.getAllServers()));
       final JsonObject servers = new JsonObject();
       for (final RegisteredServer iter : allServers) {
         servers.add(iter.getServerInfo().getName(),
