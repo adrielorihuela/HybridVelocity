@@ -32,12 +32,12 @@ after the server, so players can run `/Lobby` instead of `/server Lobby`. The co
 available to everyone by default and can be restricted per server with permissions.
 See [docs/server-commands.md](docs/server-commands.md).
 
-### Planned: offline player authentication
+### Offline player authentication
 
-A register/login gate for hybrid offline players — the proxy holds them in the PLAY state
-with no backend connection until they authenticate, backed by an embedded SQLite database
-with salted password hashes. The full specification lives in
-[docs/update-plan.md](docs/update-plan.md); it is not implemented yet.
+Players Mojang cannot authenticate can be required to register a password and log in before
+they reach any of your servers. They wait in a limbo world that runs **inside the proxy** —
+no extra server to install or configure — and passwords are stored as bcrypt hashes in an
+embedded SQLite database. Off by default. See [docs/offline-auth.md](docs/offline-auth.md).
 
 ## Building
 
