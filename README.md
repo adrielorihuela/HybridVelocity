@@ -27,7 +27,7 @@ See `proxy/src/main/java/com/velocitypowered/proxy/connection/client/InitialLogi
 
 ### Per-server shortcut commands
 
-Servers listed in the `comandos` option of `velocity.toml` get their own command named
+Servers listed in the `comandos` option of `hybridvelocity.toml` get their own command named
 after the server, so players can run `/Lobby` instead of `/server Lobby`. The commands are
 available to everyone by default and can be restricted per server with permissions.
 See [docs/server-commands.md](docs/server-commands.md).
@@ -48,7 +48,7 @@ build cycle, including Checkstyle, Spotless and the tests.
 ## Running
 
 Once built, copy and run the `-all` JAR from `proxy/build/libs`. The proxy generates a
-default `velocity.toml` on first startup and you can configure it from there.
+default `hybridvelocity.toml` on first startup and you can configure it from there.
 
 ## Documentation
 

@@ -52,6 +52,23 @@ Both patches are marked in the source with a `HybridVelocity patch:` comment.
 | `server/Log.java` | Use `org.slf4j.Logger` instead of casting to `ch.qos.logback.classic.Logger`; `setLevel` only records the level instead of reconfiguring logback | Upstream logs through logback. The proxy uses log4j2 with `log4j-slf4j2-impl`, so the logback cast would throw `ClassCastException` at startup. Log levels now follow the proxy's own logging configuration. |
 | `server/LimboServer.java` | Added `start(Path)` and `startEmbedded(Path)`; `stop()` made public; the interactive `CommandManager`, the JVM shutdown hook and `System.gc()` are skipped when embedded | The command manager reads `System.in` and would fight the proxy console. Lifecycle is driven by `VelocityServer` instead. The working-directory parameter avoids the hardcoded `Paths.get("./")`. |
 
+## Configuration
+
+The limbo runs from `auth/settings.yml`, written once from
+`proxy/src/main/resources/limbo-settings.yml` with a comment on every option. Defaults are silent
+and cheap: no join message, boss bar, title, brand or tab list, spectator game mode, one Netty
+thread each way, and tight traffic limits.
+
+`dimension: THE_END` is load-bearing rather than cosmetic. The limbo sends no chunk data at all, so
+the client renders only the dimension's sky, and the End's is a fixed dark backdrop with no sun,
+moon, clouds or horizon — looking around shows no movement, which is what makes it read as a
+waiting screen. The Overworld would show a moving sky and give it away.
+
+Only two keys belong to the proxy: `bind`, always loopback, and `infoForwarding`, matched to the
+proxy's own mode so the loopback hop is authenticated like any other backend. The file is rewritten
+only when one of those changes, because reloading and re-saving it through Configurate strips every
+comment.
+
 Two things are deliberately **not** patched:
 
 - **`BuildConfig`** — upstream generates it with the `com.github.gmazzo.buildconfig` Gradle plugin.

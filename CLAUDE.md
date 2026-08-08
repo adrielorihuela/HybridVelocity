@@ -8,17 +8,24 @@ HybridVelocity is a fork of [Velocity](https://github.com/PaperMC/Velocity), the
 server proxy. Most of the tree is upstream code; `docs/` documents what the fork changes.
 Read `docs/README.md` before touching login, configuration or command code.
 
-Fork-specific behaviour lives in three places:
+Fork-specific behaviour:
 
 - **Hybrid offline profiles** (`connection/client/InitialLoginSessionHandler.java`) — when the
   Mojang session server returns 204, the player is accepted with a `.`-suffixed username and
   an offline UUID derived from it, instead of being disconnected. See
   `docs/hybrid-offline-profiles.md`.
+- **Offline authentication** (`proxy/.../auth/`, `[offline-auth]`) — unauthenticated offline
+  players are held in an embedded limbo until they `/register` or `/login`. See
+  `docs/offline-auth.md`.
+- **Embedded limbo** (`:limbo` module) — a vendored copy of NanoLimbo run in-process. See
+  `docs/limbo.md`.
 - **Per-server shortcut commands** (`command/builtin/ServerShortcutCommand.java`, registered
   from `VelocityServer#registerServerCommands`) — the `comandos` list in `[servers]`.
   See `docs/server-commands.md`.
-- **Planned offline authentication** — `docs/update-plan.md` is a specification only, not
-  implemented.
+
+The configuration file is `hybridvelocity.toml`; `ConfigurationLocation` renames an
+upstream-named `velocity.toml` on first start. Permission nodes keep the `velocity.` prefix —
+they are identifiers operators have already granted, not branding.
 
 Keep diffs against upstream narrow so upstream merges stay manageable.
 
@@ -50,8 +57,10 @@ Apply formatting — run before committing, the build fails on style violations.
 ./gradlew :velocity-proxy:runShadow
 ```
 
-Run the proxy locally; it generates `velocity.toml`, `forwarding.secret` and `lang/` in
-`proxy/run/`. The shaded distributable is `proxy/build/libs/HybridVelocity-<forkVersion>.jar`.
+Run the proxy locally; it generates `hybridvelocity.toml`, `forwarding.secret` and `lang/` in
+`proxy/run/`. The build produces two jars in `proxy/build/libs/`:
+`HybridVelocity-<forkVersion>-all.jar` is the runnable distributable and the one to attach to a
+release; `HybridVelocity-<forkVersion>.jar` is the thin jar.
 
 ### Versioning
 
@@ -95,14 +104,14 @@ Because everything runs on Netty event loops, blocking work must be dispatched o
 
 `VelocityServer` is the composition root: it constructs the command manager, event manager,
 plugin manager, scheduler, `ServerMap` and `ConnectionManager`, then `start()` registers
-built-in commands, loads `velocity.toml`, registers servers, loads plugins, fires
+built-in commands, loads the configuration, registers servers, loads plugins, fires
 `ProxyInitializeEvent` and binds. Note the ordering constraint: built-in commands are
 registered *before* the config is loaded, so anything that depends on configuration (like the
 server shortcut commands) must be registered after the server-registration loop.
 `reloadConfiguration()` is the mirror image for `/velocity reload` and must be updated
 whenever startup gains configuration-derived state.
 
-`VelocityConfiguration` deserializes `velocity.toml` with night-config, using
+`VelocityConfiguration` deserializes `hybridvelocity.toml` with night-config, using
 `proxy/src/main/resources/default-velocity.toml` as the template written on first run.
 Sub-tables (`[servers]`, `[forced-hosts]`, `[advanced]`, …) map to private static inner
 classes. `validate()` is the place for cross-checks between sections, and
@@ -111,7 +120,43 @@ in place — add one when an existing key changes shape.
 
 `api/` is the public plugin API and must stay source-compatible; `proxy/` implements it.
 `native/` provides libdeflate/OpenSSL acceleration with pure-Java fallbacks, so nothing may
-assume the native path is available.
+assume the native path is available. `limbo/` is vendored third-party source — see below.
+
+### The embedded limbo and its subtree
+
+`limbo/upstream/` is a pristine `git subtree` of [NanoLimbo](https://github.com/Nan1t/NanoLimbo)
+(GPL-3.0, same licence as this fork). The module's build script sits *outside* the subtree and
+points `sourceSets` into it, so upstream stays byte-identical and `git subtree pull` does not
+conflict. Two upstream files carry local patches, both marked `HybridVelocity patch:` and listed
+in `docs/limbo.md` — keep that list accurate and the patch surface small.
+
+**Checkstyle is disabled and Spotless excludes `upstream/**` for that module.** This is a
+licensing requirement, not a style preference: `velocity-spotless` applies
+`licenseHeaderFile(HEADER.txt)`, which replaces everything above the `package` declaration and
+would rewrite NanoLimbo's GPL copyright notices to "Velocity Contributors".
+
+`EmbeddedLimboServer` writes `auth/settings.yml` once from the documented template at
+`proxy/src/main/resources/limbo-settings.yml`, then leaves it alone unless the bind port or
+forwarding mode changed — reloading and re-saving through Configurate strips every comment.
+
+### Offline authentication
+
+The gate (`auth/OfflineAuthGate.java`) is built entirely from events, not by patching the login
+handlers. One `ServerPreConnectEvent` listener covers every route to a backend, because they all
+end up in `createConnectionRequest`; `PlayerAvailableCommandsEvent` hides commands;
+`CommandExecuteEvent` blocks execution; a `PermissionsSetupEvent` function denies permissions.
+`PostLoginEvent` must keep firing — an earlier attempt short-circuited it and broke plugins.
+
+Blocking work stays off the event loops: `AuthDatabase` serialises JDBC on one thread and
+`OfflineAuthManager` runs bcrypt on its own pool. `PasswordLookup` deliberately distinguishes
+`FAILED` from `NOT_REGISTERED`, so a broken database cannot offer `/register` for an account
+that already exists.
+
+**The limbo is a normally registered server.** It was once kept out of the `ServerMap` to hide
+it, which broke ViaVersion: Via pings every server in `getAllServers()` to learn its protocol,
+and a server it cannot see falls back to a pre-1.16 assumption and mis-decodes the login. It is
+hidden from command output through `server/InternalServers.java` instead — add any new
+player-facing server listing to that filter rather than un-registering things.
 
 ### Commands and permissions
 
