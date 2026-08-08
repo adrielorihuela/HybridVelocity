@@ -26,10 +26,12 @@ import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.spongepowered.configurate.CommentedConfigurationNode;
+import org.spongepowered.configurate.serialize.SerializationException;
 import org.spongepowered.configurate.yaml.NodeStyle;
 import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 import ua.nanit.limbo.server.LimboServer;
@@ -38,10 +40,11 @@ import ua.nanit.limbo.server.LimboServer;
  * Runs a {@link LimboServer} inside the proxy JVM, bound to loopback, as the holding area for
  * players that have not authenticated yet.
  *
- * <p>The operator never configures this: the settings file is created on first run and the keys
- * the proxy owns — the bind address and the player-info forwarding that secures the loopback hop —
- * are rewritten on every start to match the proxy's own configuration. Everything else in that file
- * is left alone so it can be tuned.</p>
+ * <p>The operator never configures this. The settings file is written once from a documented
+ * template, and afterwards it is left alone unless the two values the proxy owns — the bind port
+ * and the forwarding that secures the loopback hop — no longer match. Rewriting through Configurate
+ * would strip every comment, so it only happens when something genuinely changed, and it is logged
+ * when it does.</p>
  *
  * <p>See {@code docs/limbo.md}.</p>
  */
@@ -49,6 +52,7 @@ public final class EmbeddedLimboServer {
 
   private static final Logger logger = LogManager.getLogger(EmbeddedLimboServer.class);
   private static final String SETTINGS_FILE = "settings.yml";
+  private static final String TEMPLATE_RESOURCE = "/limbo-settings.yml";
   private static final String LOOPBACK = "127.0.0.1";
 
   private final Path directory;
@@ -63,7 +67,7 @@ public final class EmbeddedLimboServer {
   }
 
   /**
-   * Writes the managed settings and starts the limbo server.
+   * Writes the settings if needed and starts the limbo server.
    *
    * @param port the port to bind on loopback, or {@code 0} to pick a free one
    * @throws Exception if the settings cannot be written or the server cannot bind
@@ -106,71 +110,84 @@ public final class EmbeddedLimboServer {
     return address;
   }
 
-  /**
-   * Rewrites the keys the proxy owns, creating the file from the bundled template on first run.
-   *
-   * <p>Only {@code bind} and {@code infoForwarding} are touched. The loopback hop is authenticated
-   * with the proxy's own forwarding mode and secret, so an unauthenticated player cannot reach the
-   * limbo by connecting to its port directly when a forwarding mode is in use.</p>
-   */
   private void writeSettings(final int port) throws IOException {
     final Path settings = directory.resolve(SETTINGS_FILE);
-    final boolean firstRun = !Files.exists(settings);
-    if (firstRun) {
-      copyTemplate(settings);
+    final PlayerInfoForwarding forwarding = configuration.getPlayerInfoForwardingMode();
+    final String type = toLimboForwardingType(forwarding);
+    final String secret =
+        new String(configuration.getForwardingSecret(), StandardCharsets.UTF_8);
+
+    if (!Files.exists(settings)) {
+      writeTemplate(settings, port, type, secret);
+      return;
     }
 
-    final YamlConfigurationLoader loader = YamlConfigurationLoader.builder()
-        .path(settings)
-        .nodeStyle(NodeStyle.BLOCK)
-        .build();
-    final CommentedConfigurationNode root = loader.load();
+    if (!managedValuesDiffer(settings, port, type, secret)) {
+      return;
+    }
 
+    logger.info("The limbo bind port or forwarding mode changed; rewriting {}. Comments in that "
+        + "file are not preserved by the rewrite.", settings);
+    rewriteManagedValues(settings, port, type, secret);
+  }
+
+  /** Writes the documented template, which is the only path that preserves its comments. */
+  private static void writeTemplate(final Path settings, final int port, final String type,
+      final String secret) throws IOException {
+    final String template;
+    try (InputStream in = EmbeddedLimboServer.class.getResourceAsStream(TEMPLATE_RESOURCE)) {
+      if (in == null) {
+        throw new IOException("The bundled limbo settings template is missing from the jar");
+      }
+      template = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+    }
+
+    // BUNGEE_GUARD reads the shared secret from the token list instead of `secret`.
+    final String tokens = "BUNGEE_GUARD".equals(type)
+        ? "    - \"" + secret + "\""
+        : "    - \"\"";
+
+    final String rendered = template
+        .replace("{{PORT}}", Integer.toString(port))
+        .replace("{{FORWARDING_TYPE}}", type)
+        .replace("{{FORWARDING_SECRET}}", secret)
+        .replace("{{FORWARDING_TOKENS}}", tokens);
+
+    Files.writeString(settings, rendered, StandardCharsets.UTF_8);
+  }
+
+  private static boolean managedValuesDiffer(final Path settings, final int port,
+      final String type, final String secret) throws IOException {
+    final CommentedConfigurationNode root = loader(settings).load();
+    return root.node("bind", "port").getInt(-1) != port
+        || !LOOPBACK.equals(root.node("bind", "ip").getString())
+        || !type.equals(root.node("infoForwarding", "type").getString())
+        || !Objects.equals(secret, root.node("infoForwarding", "secret").getString());
+  }
+
+  private static void rewriteManagedValues(final Path settings, final int port, final String type,
+      final String secret) throws IOException {
+    final YamlConfigurationLoader loader = loader(settings);
+    final CommentedConfigurationNode root = loader.load();
     try {
       root.node("bind", "ip").set(LOOPBACK);
       root.node("bind", "port").set(port);
-
-      final PlayerInfoForwarding forwarding = configuration.getPlayerInfoForwardingMode();
-      root.node("infoForwarding", "type").set(toLimboForwardingType(forwarding));
-      if (forwarding == PlayerInfoForwarding.MODERN) {
-        root.node("infoForwarding", "secret")
-            .set(new String(configuration.getForwardingSecret(), StandardCharsets.UTF_8));
-      } else if (forwarding == PlayerInfoForwarding.BUNGEEGUARD) {
-        root.node("infoForwarding", "tokens").setList(String.class, java.util.List.of(
-            new String(configuration.getForwardingSecret(), StandardCharsets.UTF_8)));
+      root.node("infoForwarding", "type").set(type);
+      root.node("infoForwarding", "secret").set(secret);
+      if ("BUNGEE_GUARD".equals(type)) {
+        root.node("infoForwarding", "tokens").setList(String.class, java.util.List.of(secret));
       }
-
-      if (firstRun) {
-        applyEmbeddedDefaults(root);
-      }
-    } catch (org.spongepowered.configurate.serialize.SerializationException e) {
-      throw new IOException("Could not build the embedded limbo settings", e);
+    } catch (SerializationException e) {
+      throw new IOException("Could not update the embedded limbo settings", e);
     }
-
     loader.save(root);
   }
 
-  /**
-   * Defaults applied only when the file is created, so later operator edits survive restarts.
-   *
-   * <p>NIO is used rather than upstream's EPOLL default because the limbo serves a handful of
-   * waiting players over loopback; the thread counts are trimmed for the same reason.</p>
-   */
-  private static void applyEmbeddedDefaults(final CommentedConfigurationNode root)
-      throws org.spongepowered.configurate.serialize.SerializationException {
-    root.node("netty", "transportType").set("NIO");
-    root.node("netty", "threads", "bossGroup").set(1);
-    root.node("netty", "threads", "workerGroup").set(1);
-    root.node("logPlayersIp").set(false);
-  }
-
-  private static void copyTemplate(final Path settings) throws IOException {
-    try (InputStream template = LimboServer.class.getResourceAsStream("/" + SETTINGS_FILE)) {
-      if (template == null) {
-        throw new IOException("The bundled limbo " + SETTINGS_FILE + " is missing from the jar");
-      }
-      Files.copy(template, settings);
-    }
+  private static YamlConfigurationLoader loader(final Path settings) {
+    return YamlConfigurationLoader.builder()
+        .path(settings)
+        .nodeStyle(NodeStyle.BLOCK)
+        .build();
   }
 
   private static String toLimboForwardingType(final PlayerInfoForwarding forwarding) {
@@ -185,8 +202,8 @@ public final class EmbeddedLimboServer {
   /**
    * Asks the OS for a free port by binding and immediately releasing one.
    *
-   * <p>There is a small race between releasing the port and the limbo claiming it. Set an explicit
-   * port in the configuration if that matters.</p>
+   * <p>There is a small race between releasing the port and the limbo claiming it, which is why
+   * the configuration defaults to a fixed port instead.</p>
    */
   private static int findFreePort() throws IOException {
     try (ServerSocket socket = new ServerSocket(0)) {

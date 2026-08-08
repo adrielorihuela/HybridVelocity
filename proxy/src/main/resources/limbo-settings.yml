@@ -1,0 +1,125 @@
+# Settings for the limbo world that holds players while they register or log in.
+#
+# This file is created once and then left alone. Edit it freely — the proxy only rewrites it if
+# `limbo-port` or the forwarding mode in hybridvelocity.toml changes, and it will say so in the
+# console when it does (your comments are lost on such a rewrite).
+#
+# The defaults are deliberately silent and cheap: no messages, no tab list, no HUD, one thread.
+
+# Managed by the proxy. Always loopback, so the limbo is unreachable from outside this machine.
+# Change the port in hybridvelocity.toml under [offline-auth], not here.
+bind:
+  ip: "127.0.0.1"
+  port: {{PORT}}
+
+# Managed by the proxy: matched to player-info-forwarding-mode in hybridvelocity.toml so this hop
+# is authenticated exactly like any other backend. Do not set these by hand.
+infoForwarding:
+  type: {{FORWARDING_TYPE}}
+  secret: "{{FORWARDING_SECRET}}"
+  tokens:
+{{FORWARDING_TOKENS}}
+
+# How many players may wait here at once. -1 for unlimited.
+maxPlayers: 100
+
+# What this shows if something pings it directly. Players never see it: the limbo is only
+# reachable on loopback, and it is hidden from /server and the other command listings.
+ping:
+  description: "HybridVelocity authentication"
+  version: "HybridVelocity"
+  # -1 reports the connecting client's own protocol, so every client version is accepted.
+  protocol: -1
+
+# The world the player is put in. THE_END is what makes this look like a waiting screen: the
+# proxy sends no chunks at all, so all the client renders is the dimension's sky, and the End's
+# is a fixed dark backdrop with no sun, moon, clouds or horizon. Looking around shows no
+# movement. OVERWORLD would show a day/night sky and give the illusion away; THE_NETHER is a
+# uniform red fog if you prefer that.
+dimension: THE_END
+
+# 0 survival, 1 creative, 2 adventure, 3 spectator.
+# Spectator hides the hotbar, health, hunger and XP bars, leaving a clean screen.
+gameMode: 3
+
+# Removes the "insecure chat" warning toast on 1.20.5+ clients.
+secureProfile: false
+
+# Everything below is off so the player sees nothing but the authentication prompt.
+# Turn any of them on if you want to brand the waiting screen.
+
+# Show the player in the tab list. Off: pressing Tab shows nothing.
+# `username` is still read even when disabled, so it must not be removed.
+playerList:
+  enable: false
+  username: "Auth"
+
+# Header and footer text above and below the tab list.
+headerAndFooter:
+  enable: false
+  header: ""
+  footer: ""
+
+# The server name shown in the F3 debug screen on 1.13+.
+brandName:
+  enable: false
+  content: "HybridVelocity"
+
+# A chat message sent on arrival. Off, so the only chat is the authentication prompt.
+joinMessage:
+  enable: false
+  text: ""
+
+# A boss bar across the top of the screen, on 1.9+.
+bossBar:
+  enable: false
+  text: ""
+  health: 1.0
+  # PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE
+  color: BLUE
+  # SOLID, DASHES_6, DASHES_10, DASHES_12, DASHES_20
+  division: SOLID
+
+# A title and subtitle across the middle of the screen, on 1.8+. Times are in ticks (20 = 1s).
+title:
+  enable: false
+  title: ""
+  subtitle: ""
+  fadeIn: 10
+  stay: 100
+  fadeOut: 10
+
+# Drop a connection that sends nothing for this many milliseconds. Players waiting here answer
+# keep-alives every 5 seconds, so anything above that is safe.
+readTimeout: 30000
+
+# Log each player's IP when they arrive here. Off by default: the proxy already logs the
+# connection once, and repeating it adds nothing but personal data to your logs.
+logPlayersIp: false
+
+# 0 errors only, 1 errors and warnings, 2 adds info, 3 adds debug.
+# 1 keeps the console quiet; the proxy already reports when the limbo starts and stops.
+debugLevel: 1
+
+# Networking. Only change these if you know why you are changing them.
+netty:
+  # EPOLL, IO_URING, KQUEUE or NIO. NIO works everywhere; the others are Linux/macOS
+  # optimisations and fall back to NIO automatically if unavailable.
+  transportType: NIO
+  # One thread each is plenty: this only ever serves players sitting at a login prompt.
+  threads:
+    bossGroup: 1
+    workerGroup: 1
+
+# Kick connections that flood the limbo. A waiting player sends almost nothing, so these limits
+# are far tighter than a real server's would be.
+traffic:
+  enable: true
+  # Largest single packet accepted, in bytes. -1 for unlimited.
+  maxPacketSize: 4096
+  # Seconds over which the rates below are averaged. -1 to ignore.
+  interval: 7.0
+  # Packets per second. -1 to ignore.
+  maxPacketRate: 100.0
+  # Bytes per second. -1 to ignore.
+  maxPacketBytesRate: 1024.0
